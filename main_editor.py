@@ -67,7 +67,7 @@ class GameXMLEditor:
     
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("AVATAR .game.xml File Editor | Made By: Jasper_Zebra | Version 1.0")
+        self.root.title("AVATAR .game.xml File Editor | Made By: Jasper_Zebra | Version 1.5")
         self.root.geometry("1400x900")
         
         # Apply dark theme
