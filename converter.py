@@ -5,18 +5,25 @@ import xml.etree.ElementTree as ET
 
 
 class GameXMLConverter:
-    """Handles conversion of .game.xml files between binary and XML formats"""
+    """Handles conversion of XML and .game.xml files between formats"""
     
     def __init__(self, tools_path="tools"):
         """Initialize the converter with paths to conversion tools"""
         self.tools_path = tools_path
         self.xml_converter_path = os.path.join(tools_path, "Gibbed.Dunia.ConvertXml.exe")
         
+        # Excluded files that should not be converted
+        self.excluded_files = [
+            "_depload.xml",
+            "moviedata.xml"
+        ]
+        
         # Check for tools and dependencies
         self.check_dependencies()
-        
+    
     def check_dependencies(self):
         """Check if all required dependencies are available"""
+        # Check main executable
         self.xml_converter_exists = os.path.exists(self.xml_converter_path)
         
         # Check required DLLs
@@ -43,36 +50,58 @@ class GameXMLConverter:
             if self.missing_dlls:
                 print(f"  - Missing DLLs: {', '.join(self.missing_dlls)}")
     
+    def should_exclude_file(self, file_path):
+        """Check if a file should be excluded from conversion"""
+        filename = os.path.basename(file_path)
+        for excluded_file in self.excluded_files:
+            if excluded_file in filename:
+                return True
+        return False
+    
     def is_file_xml_format(self, file_path):
-        """Check if a .game.xml file is in readable XML format"""
+        """Check if a file is in readable XML format"""
         try:
             ET.parse(file_path)
             return True
         except ET.ParseError:
             return False
     
-    def convert_to_readable(self, game_xml_path):
-        """Convert binary .game.xml to readable XML format"""
+    def convert_to_readable(self, file_path):
+        """Convert file to readable XML format"""
         if not self.can_convert:
             return False, "Conversion tools not available"
         
+        # Skip excluded files
+        if self.should_exclude_file(file_path):
+            return False, f"File {file_path} is excluded from conversion"
+        
         try:
             # Check if already readable
-            if self.is_file_xml_format(game_xml_path):
+            if self.is_file_xml_format(file_path):
                 return True, "File is already in readable XML format"
             
-            # Rename .game.xml to .game.rml (it's actually binary)
-            rml_path = game_xml_path.replace(".game.xml", ".game.rml")
+            # Determine conversion paths
+            base, ext = os.path.splitext(file_path)
+            if ext == '.game.xml':
+                rml_path = base + '.rml'
+                xml_path = file_path
+            elif ext == '.xml':
+                rml_path = base + '.rml'
+                xml_path = file_path
+            else:
+                rml_path = file_path + '.rml'
+                xml_path = file_path.replace(ext, '.xml')
             
             # Backup original file
             if os.path.exists(rml_path):
                 os.remove(rml_path)
-            shutil.move(game_xml_path, rml_path)
+            shutil.move(file_path, rml_path)
             
-            # Convert RML to readable XML
+            # Use absolute paths with forward slashes
             abs_rml_path = os.path.abspath(rml_path).replace("\\", "/")
-            abs_xml_path = os.path.abspath(game_xml_path).replace("\\", "/")
+            abs_xml_path = os.path.abspath(xml_path).replace("\\", "/")
             
+            # Run conversion
             process = subprocess.run(
                 [self.xml_converter_path, "--xml", abs_rml_path, abs_xml_path],
                 stdout=subprocess.PIPE,
@@ -81,36 +110,49 @@ class GameXMLConverter:
                 timeout=10
             )
             
+            # Check conversion result
             if process.returncode != 0:
                 # Restore original file on failure
-                shutil.move(rml_path, game_xml_path)
+                shutil.move(rml_path, file_path)
                 return False, f"Conversion failed: {process.stderr}"
             
             # Clean up intermediate file
             if os.path.exists(rml_path):
                 os.remove(rml_path)
             
-            return True, "Successfully converted to readable XML format"
+            return True, f"Successfully converted to readable XML format: {abs_xml_path}"
             
         except Exception as e:
             return False, f"Error during conversion: {str(e)}"
     
-    def save_as_binary(self, game_xml_path):
-        """Convert readable XML back to binary .game.xml format"""
+    def save_as_binary(self, file_path):
+        """Convert readable XML back to binary format"""
         if not self.can_convert:
             return False, "Conversion tools not available"
         
+        # Skip excluded files
+        if self.should_exclude_file(file_path):
+            return False, f"File {file_path} is excluded from conversion"
+        
         try:
-            # Create backup of readable XML
-            backup_path = game_xml_path + ".readable.bak"
-            shutil.copy2(game_xml_path, backup_path)
+            # Create backup of readable XML - REMOVED THIS PART
+            # backup_path = file_path + ".readable.bak"
+            # shutil.copy2(file_path, backup_path)
             
-            # Convert XML to RML
-            rml_path = game_xml_path.replace(".game.xml", ".game.rml")
+            # Determine conversion paths
+            base, ext = os.path.splitext(file_path)
+            if ext == '.game.xml':
+                rml_path = base + '.rml'
+            elif ext == '.xml':
+                rml_path = base + '.rml'
+            else:
+                rml_path = file_path + '.rml'
             
-            abs_xml_path = os.path.abspath(game_xml_path).replace("\\", "/")
+            # Use absolute paths with forward slashes
+            abs_xml_path = os.path.abspath(file_path).replace("\\", "/")
             abs_rml_path = os.path.abspath(rml_path).replace("\\", "/")
             
+            # Run conversion
             process = subprocess.run(
                 [self.xml_converter_path, "--rml", abs_xml_path, abs_rml_path],
                 stdout=subprocess.PIPE,
@@ -119,15 +161,17 @@ class GameXMLConverter:
                 timeout=30
             )
             
+            # Check conversion result
             if process.returncode != 0:
                 return False, f"Conversion to binary failed: {process.stderr}"
             
             # Replace original with binary version
-            if os.path.exists(game_xml_path):
-                os.remove(game_xml_path)
-            shutil.move(rml_path, game_xml_path)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            shutil.move(rml_path, file_path)
             
-            return True, f"Successfully saved as binary format. Readable backup: {backup_path}"
+            # Modified success message to not mention readable backup
+            return True, f"Successfully saved as binary format."
             
         except Exception as e:
             return False, f"Error during save: {str(e)}"

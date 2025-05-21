@@ -1,16 +1,28 @@
 """
-Configuration settings for the Game XML Editor
+Configuration settings for the XML Editor
 """
 
 import os
 
 # Default paths
 DEFAULT_TOOLS_PATH = "tools"
-DEFAULT_WINDOW_WIDTH = 1200
-DEFAULT_WINDOW_HEIGHT = 800
+DEFAULT_WINDOW_WIDTH = 1400
+DEFAULT_WINDOW_HEIGHT = 900
 
 # File extensions
-SUPPORTED_EXTENSIONS = [".game.xml", ".xml"]
+SUPPORTED_EXTENSIONS = [
+    ".game.xml",   # Game-specific XML format
+    ".xml",        # Standard XML format
+    ".rml"         # Binary-like XML format
+]
+
+# Exclusions (files that should not be converted)
+EXCLUDED_FILES = [
+    "_depload.xml",
+    "moviedata.xml",
+    "_deploadnewparticles_",  # Prefix for particle files
+    ".preload.xml"
+]
 
 # Conversion tool filenames
 CONVERTER_EXECUTABLE = "Gibbed.Dunia.ConvertXml.exe"
@@ -27,31 +39,44 @@ DETAILS_DEFAULT_WIDTH = 400
 ATTRIBUTE_COLUMN_WIDTH = 150
 VALUE_COLUMN_WIDTH = 250
 
-# Colors (for potential theming)
-COLORS = {
-    "background": "#ffffff",
-    "foreground": "#000000",
-    "selected": "#0078d4",
-    "error": "#d13438",
+# Syntax highlighting colors
+SYNTAX_COLORS = {
+    "tag": "#569cd6",       # Blue for XML tags
+    "attribute": "#9cdcfe", # Light blue for attributes
+    "string": "#ce9178",    # Orange/salmon for string values
+    "comment": "#6a9955",   # Green for comments
+    "text": "#d4d4d4"       # Light gray for text
+}
+
+# Dark Theme Colors
+DARK_THEME_COLORS = {
+    "background": "#1e1e1e",
+    "foreground": "#d4d4d4",
+    "selected": "#264f78",
+    "accent": "#007acc",
+    "error": "#f44747",
     "warning": "#ff8c00",
-    "success": "#107c10"
+    "success": "#4ec9b0"
 }
 
 # Editor settings
 EDITOR_SETTINGS = {
     "auto_expand_root": True,
-    "auto_backup": True,
+    "auto_backup": False,
     "confirm_deletes": True,
     "pretty_print_xml": True,
     "xml_encoding": "utf-8",
-    "xml_declaration": True
+    "xml_declaration": True,
+    "max_undo_levels": 50,
+    "auto_save_interval": 5  # minutes
 }
 
 # Search settings
 SEARCH_SETTINGS = {
     "case_sensitive_default": False,
     "highlight_all_matches": True,
-    "wrap_around": True
+    "wrap_around": True,
+    "max_results": 100
 }
 
 def get_tools_path():

@@ -647,7 +647,7 @@ Use 'Open Game XML...' to get started!"""
         # Create a custom dark-themed about dialog
         about_window = tk.Toplevel(self.root)
         about_window.title("About Game XML Editor")
-        about_window.geometry("400x300")
+        about_window.geometry("500x400")
         about_window.configure(bg=DarkTheme.BG_DARK)
         about_window.resizable(False, False)
         about_window.transient(self.root)
@@ -726,10 +726,10 @@ Built with Python and tkinter"""
         msg_window.transient(self.root)
         msg_window.grab_set()
         
-        # Calculate size based on message length
+        # Calculate size based on message length - MODIFY THESE VALUES
         lines = message.split('\n')
-        width = max(300, max(len(line) * 8 for line in lines) + 100)
-        height = max(150, len(lines) * 25 + 120)
+        width = max(400, max(len(line) * 9 for line in lines) + 120)  # Increased from 300 to 400
+        height = max(200, len(lines) * 30 + 150)  # Increased from 150 to 200 and multiplier from 25 to 30
         msg_window.geometry(f"{width}x{height}")
         
         # Center the window
@@ -757,32 +757,32 @@ Built with Python and tkinter"""
             icon = "ℹ️"
             color = DarkTheme.ACCENT_BLUE
         
-        icon_label = ttk.Label(icon_frame, text=icon, font=('Segoe UI', 16))
+        icon_label = ttk.Label(icon_frame, text=icon, font=('Segoe UI', 18))  # Increased font size from 16 to 18
         icon_label.pack(side=tk.LEFT)
         
         title_label = ttk.Label(icon_frame, text=title, 
-                               font=('Segoe UI', 12, 'bold'),
-                               foreground=color)
+                            font=('Segoe UI', 14, 'bold'),  # Increased font size from 12 to 14
+                            foreground=color)
         title_label.pack(side=tk.LEFT, padx=(10, 0))
         
         # Message
         msg_label = ttk.Label(main_frame, text=message,
-                             font=('Segoe UI', 10),
-                             justify=tk.LEFT,
-                             wraplength=width-40)
+                            font=('Segoe UI', 11),  # Increased font size from 10 to 11
+                            justify=tk.LEFT,
+                            wraplength=width-60)  # Increased wraplength from width-40 to width-60
         msg_label.pack(pady=(0, 20))
         
         # OK button
         ok_button = ttk.Button(main_frame, 
-                              text="OK",
-                              command=msg_window.destroy,
-                              width=10)
+                            text="OK",
+                            command=msg_window.destroy,
+                            width=15)  # Increased width from 10 to 15
         ok_button.pack()
         
         # Focus and wait
         ok_button.focus_set()
         msg_window.wait_window()
-    
+
     def open_file(self):
         """Open a .game.xml file with better file handling"""
         filetypes = [
@@ -804,12 +804,13 @@ Built with Python and tkinter"""
         try:
             # Check if file is in readable format
             if not self.converter.is_file_xml_format(filename):
-                # Ask user if they want to convert
-                result = messagebox.askyesno(
+                # Ask user if they want to convert using custom messagebox
+                result = self.show_custom_messagebox_with_result(
                     "Binary Format Detected",
                     "This .game.xml file appears to be in binary format.\n\n"
                     "Would you like to convert it to readable XML format?\n\n"
-                    "Note: A backup will be created automatically."
+                    "Note: You can enable `auto_backup` to create backups.",
+                    "question"
                 )
                 
                 if result:
@@ -819,9 +820,9 @@ Built with Python and tkinter"""
                         return
                     self.show_custom_messagebox("Conversion Successful", message, "info")
                 else:
-                    self.show_custom_messagebox("Cannot Edit", 
-                                               "Cannot edit binary format files. Please convert first.", 
-                                               "warning")
+                    self.show_custom_messagebox("Cannot Edit",
+                                            "Cannot edit binary format files. Please convert first.",
+                                            "warning")
                     return
             
             # Parse the XML file
@@ -850,7 +851,7 @@ Built with Python and tkinter"""
             
         except Exception as e:
             self.show_custom_messagebox("Error", f"Failed to load file:\n{str(e)}", "error")
-    
+
     def update_statistics(self):
         """Update file and element statistics"""
         if not self.tree_data or not self.current_file:
@@ -1302,13 +1303,13 @@ Built with Python and tkinter"""
             return
         
         try:
-            # Create backup if file exists
-            if os.path.exists(self.current_file):
+            from config import EDITOR_SETTINGS
+            if os.path.exists(self.current_file) and EDITOR_SETTINGS.get("auto_backup", False):
                 backup_path = self.current_file + ".backup"
                 import shutil
                 shutil.copy2(self.current_file, backup_path)
-                self.status_var.set(f"Backup created: {os.path.basename(backup_path)}")
-            
+                self.status_var.set(f"Backup created: {os.path.basename(backup_path)}")   
+
             # Write XML file with pretty formatting
             self.indent_xml(self.tree_data.getroot())
             self.tree_data.write(self.current_file, encoding="utf-8", xml_declaration=True)
@@ -1322,10 +1323,7 @@ Built with Python and tkinter"""
             # Update statistics and source view
             self.update_statistics()
             self.refresh_source_view()
-            
-            self.status_var.set(f"Saved: {self.current_file}")
-            self.show_custom_messagebox("Saved", "File saved successfully!", "info")
-            
+                        
         except Exception as e:
             self.show_custom_messagebox("Save Error", f"Failed to save file:\n{str(e)}", "error")
     
@@ -1335,16 +1333,17 @@ Built with Python and tkinter"""
             self.show_custom_messagebox("No File", "No file is currently open.", "warning")
             return
         
-        # Show information about the process
-        result = messagebox.askquestion("Save as Binary",
-                                       "This will:\n\n"
-                                       "1. Save the current XML file\n"
-                                       "2. Convert it to binary format\n"
-                                       "3. Create a readable backup\n\n"
-                                       "Continue?",
-                                       icon='question')
+        # Show information about the process using custom messagebox instead of standard messagebox
+        custom_result = self.show_custom_messagebox_with_result(
+            "Save as Binary",
+            "This will:\n\n"
+            "1. Save the current XML file\n"
+            "2. Convert it to binary format\n\n"
+            "Continue?",
+            "question"
+        )
         
-        if result != 'yes':
+        if not custom_result:
             return
         
         # First save as readable XML
@@ -1358,7 +1357,98 @@ Built with Python and tkinter"""
             self.status_var.set("Saved in binary format")
         else:
             self.show_custom_messagebox("Save Error", message, "error")
-    
+
+    def show_custom_messagebox_with_result(self, title, message, msg_type="info"):
+        """Show a custom dark-themed message box that returns a result"""
+        result = [False]  # Use a list to allow modification from inner function
+        
+        msg_window = tk.Toplevel(self.root)
+        msg_window.title(title)
+        msg_window.configure(bg=DarkTheme.BG_DARK)
+        msg_window.resizable(False, False)
+        msg_window.transient(self.root)
+        msg_window.grab_set()
+        
+        # Calculate size based on message length - MODIFY THESE VALUES
+        lines = message.split('\n')
+        width = max(400, max(len(line) * 9 for line in lines) + 120)  # Increased from 300 to 400
+        height = max(200, len(lines) * 30 + 150)  # Increased from 150 to 200 and multiplier from 25 to 30
+        msg_window.geometry(f"{width}x{height}")
+        
+        # Center the window
+        msg_window.geometry("+%d+%d" % (
+            self.root.winfo_rootx() + 200,
+            self.root.winfo_rooty() + 200
+        ))
+        
+        # Main frame
+        main_frame = ttk.Frame(msg_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Icon and title
+        icon_frame = ttk.Frame(main_frame)
+        icon_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        # Choose icon based on type
+        if msg_type == "error":
+            icon = "❌"
+            color = DarkTheme.ACCENT_RED
+        elif msg_type == "warning":
+            icon = "⚠️"
+            color = DarkTheme.ACCENT_ORANGE
+        elif msg_type == "question":
+            icon = "❓"
+            color = DarkTheme.ACCENT_BLUE
+        else:
+            icon = "ℹ️"
+            color = DarkTheme.ACCENT_BLUE
+        
+        icon_label = ttk.Label(icon_frame, text=icon, font=('Segoe UI', 18))  # Increased font size from 16 to 18
+        icon_label.pack(side=tk.LEFT)
+        
+        title_label = ttk.Label(icon_frame, text=title, 
+                            font=('Segoe UI', 14, 'bold'),  # Increased font size from 12 to 14
+                            foreground=color)
+        title_label.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Message
+        msg_label = ttk.Label(main_frame, text=message,
+                            font=('Segoe UI', 11),  # Increased font size from 10 to 11
+                            justify=tk.LEFT,
+                            wraplength=width-60)  # Increased wraplength from width-40 to width-60
+        msg_label.pack(pady=(0, 20))
+        
+        # Button frame for Yes/No buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack()
+        
+        def on_yes():
+            result[0] = True
+            msg_window.destroy()
+            
+        def on_no():
+            result[0] = False
+            msg_window.destroy()
+        
+        # Yes/No buttons
+        yes_button = ttk.Button(button_frame, 
+                            text="Yes",
+                            command=on_yes,
+                            width=15)  # Increased width from 10 to 15
+        yes_button.pack(side=tk.LEFT, padx=10)  # Increased padx from 5 to 10
+        
+        no_button = ttk.Button(button_frame, 
+                            text="No",
+                            command=on_no,
+                            width=15)  # Increased width from 10 to 15
+        no_button.pack(side=tk.LEFT, padx=10)  # Increased padx from 5 to 10
+        
+        # Focus and wait
+        yes_button.focus_set()
+        msg_window.wait_window()
+        
+        return result[0]
+
     def convert_to_readable(self):
         """Convert current file to readable format with enhanced feedback"""
         if not self.current_file:
