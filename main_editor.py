@@ -98,7 +98,7 @@ class GameXMLEditor:
         if not self.converter.can_convert:
             self.status_var.set("WARNING: File conversion disabled - missing tools/dependencies")
         else:
-            self.status_var.set("Ready - AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.0")
+            self.status_var.set("Ready - AVATAR XML File Editor")
     
     def setup_dark_theme(self):
         """Configure dark theme for the application"""
@@ -244,29 +244,26 @@ class GameXMLEditor:
         # Title
         title_label = ttk.Label(main_frame, 
                                text="🎮 AVATAR XML File Editor",
-                               font=('Segoe UI', 26, 'bold'),
+                               font=('Segoe UI', 16, 'bold'),
                                foreground=DarkTheme.ACCENT_BLUE)
         title_label.pack(pady=(0, 20))
         
         # Description
-        desc_text = """Welcome to Jasper's XML Editor!
+        desc_text = """A powerful XML editor designed for AVATAR game files.
 
-        🎮 Designed specifically for AVATAR game file editing
+        Key Features:
+        - Open and edit .game.xml, .xml, and .rml files
+        - Convert binary game files to readable XML format
+        - Live XML source editing with syntax highlighting
+        - Tree-based navigation and element management
+        - Real-time XML validation and error checking
+        - Search functionality with Ctrl+F support
+        - Modern dark theme for comfortable editing
+        - Integrated Gibbed Dunia conversion tools
 
-        What you can do:
-        - Load .game.xml, .xml, and .rml game files
-        - Convert binary formats to editable XML
-        - Browse file structure with the interactive tree view
-        - Edit XML content directly in the source tab
-        - Search through large files with Ctrl+F
-        - Validate XML syntax in real-time
-        - Save back to binary format for the game
+        Perfect for modding and analyzing AVATAR game data files.
 
-        ✨ Features a modern dark theme and intuitive interface
-        🔧 Powered by Gibbed Dunia conversion tools
-
-        Ready to start modding? Click 'Select XML File' to begin!"""
-
+        Built with Python and tkinter for reliable performance."""
         
         desc_label = ttk.Label(main_frame, 
                               text=desc_text,
@@ -355,19 +352,6 @@ class GameXMLEditor:
         self.root.bind('<Control-o>', lambda e: self.open_file())
         self.root.bind('<Control-s>', lambda e: self.save_file())
         self.root.bind('<Control-f>', lambda e: self.show_find_dialog())
-
-        # Update menu
-        update_menu = tk.Menu(menubar, tearoff=0, 
-                            bg=DarkTheme.MENU_BG, 
-                            fg=DarkTheme.MENU_FG,
-                            selectcolor=DarkTheme.ACCENT_BLUE, 
-                            activebackground=DarkTheme.SELECTION_BG,
-                            activeforeground=DarkTheme.SELECTION_FG,
-                            font=('Segoe UI', 9))
-        menubar.add_cascade(label="Update", menu=update_menu)
-        update_menu.add_command(label="Check for Updates", command=self.check_for_updates)
-        update_menu.add_command(label="View Changelog", command=self.view_changelog)
-        update_menu.add_command(label="Download Latest", command=self.download_latest)
     
     def create_toolbar(self):
         """Create the modern toolbar with dark theme"""
@@ -828,7 +812,7 @@ class GameXMLEditor:
         """Show about dialog with dark theme"""
         # Create a custom dark-themed about dialog
         about_window = tk.Toplevel(self.root)
-        about_window.title("About AVATAR XML Editor")
+        about_window.title("About AVATAR XML File Editor")
         about_window.geometry("600x500")
         about_window.configure(bg=DarkTheme.BG_DARK)
         about_window.resizable(False, False)
@@ -847,37 +831,39 @@ class GameXMLEditor:
         
         # Title
         title_label = ttk.Label(main_frame, 
-                               text="🎮 AVATAR XML Editor",
-                               font=('Segoe UI', 26, 'bold'),
+                               text="🎮 AVATAR XML File Editor",
+                               font=('Segoe UI', 16, 'bold'),
                                foreground=DarkTheme.ACCENT_BLUE)
         title_label.pack(pady=(0, 10))
         
         # Version
         version_label = ttk.Label(main_frame, 
-                                 text="Version 2.0",
+                                 text="Version 1.5",
                                  font=('Segoe UI', 10))
         version_label.pack(pady=(0, 20))
         
         # Description
-        desc_text = """A powerful XML editor designed for AVATAR game files.
+        desc_text = """Welcome to Jasper's XML Editor!
 
-        Key Features:
-        - Open and edit .game.xml, .xml, and .rml files
-        - Convert binary game files to readable XML format
-        - Live XML source editing with syntax highlighting
-        - Tree-based navigation and element management
-        - Real-time XML validation and error checking
-        - Search functionality with Ctrl+F support
-        - Modern dark theme for comfortable editing
-        - Integrated Gibbed Dunia conversion tools
+        🎮 Designed specifically for AVATAR game file editing
 
-        Perfect for modding and analyzing AVATAR game data files.
+        What you can do:
+        - Load .game.xml, .xml, and .rml game files
+        - Convert binary formats to editable XML
+        - Browse file structure with the interactive tree view
+        - Edit XML content directly in the source tab
+        - Search through large files with Ctrl+F
+        - Validate XML syntax in real-time
+        - Save back to binary format for the game
 
-        Built with Python and tkinter for reliable performance."""        
+        ✨ Features a modern dark theme and intuitive interface
+        🔧 Powered by Gibbed Dunia conversion tools
 
+        Ready to start modding? Click 'Select XML File' to begin!"""
+        
         desc_label = ttk.Label(main_frame, 
                               text=desc_text,
-                              font=('Segoe UI', 10),
+                              font=('Segoe UI', 9),
                               justify=tk.CENTER)
         desc_label.pack(pady=(0, 20))
         
@@ -1048,7 +1034,7 @@ class GameXMLEditor:
             self.file_info_label.config(text=f"📄 {os.path.basename(filename)}")
             
             # Update window title
-            self.root.title(f"AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.0 | Current XML File Loaded: {os.path.basename(filename)}")
+            self.root.title(f"AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.0 | Current XML File Loaded: - {os.path.basename(filename)}")
             self.status_var.set(f"Loaded: {filename}")
             
             # Update statistics
@@ -1633,7 +1619,100 @@ class GameXMLEditor:
             display_text += f" [{child_count} children]"
         
         self.tree.item(item, text=display_text)
+    
+    def edit_attribute(self, event, item=None):
+        """Edit selected attribute with improved handling"""
+        if item is None:
+            selection = self.attr_tree.selection()
+            if not selection:
+                return
+            item = selection[0]
         
+        attr_name = self.attr_tree.item(item, "text")
+        attr_values = self.attr_tree.item(item, "values")
+        
+        # Handle case where value might be empty
+        attr_value = attr_values[0] if attr_values else ""
+        
+        # Create edit dialog
+        dialog = AttributeEditDialog(self.root, attr_name, attr_value)
+        
+        # Wait for dialog to complete
+        self.root.wait_window(dialog.dialog)
+        
+        # Check if we have a result
+        if hasattr(dialog, 'result') and dialog.result:
+            new_name, new_value = dialog.result
+            
+            # Update in XML
+            tree_selection = self.tree.selection()
+            if tree_selection:
+                tree_item = tree_selection[0]
+                if tree_item in self.element_map:
+                    element = self.element_map[tree_item]
+                    
+                    # Remove old attribute if name changed
+                    if new_name != attr_name and attr_name in element.attrib:
+                        del element.attrib[attr_name]
+                    
+                    # Set new attribute
+                    element.attrib[new_name] = new_value
+                    
+                    # Update displays
+                    self.refresh_attribute_display(element)
+                    self.update_tree_item_text(tree_item, element)
+                    self.mark_modified()
+                    
+                    # Refresh source view if visible
+                    current_tab = self.notebook.tab(self.notebook.select(), "text")
+                    if current_tab == "XML Source":
+                        self.refresh_source_view()
+    
+    def add_attribute(self):
+        """Add new attribute to selected element with improved UX"""
+        tree_selection = self.tree.selection()
+        if not tree_selection:
+            self.show_custom_messagebox("No Selection", "Please select an element first.", "warning")
+            return
+        
+        # Create edit dialog for new attribute
+        dialog = AttributeEditDialog(self.root, "", "")
+        
+        # Wait for dialog to complete
+        self.root.wait_window(dialog.dialog)
+        
+        # Check if we have a result
+        if hasattr(dialog, 'result') and dialog.result:
+            attr_name, attr_value = dialog.result
+            
+            # Check if attribute already exists
+            tree_item = tree_selection[0]
+            if tree_item in self.element_map:
+                element = self.element_map[tree_item]
+                
+                if attr_name in element.attrib:
+                    result = messagebox.askyesno("Attribute Exists", 
+                                               f"Attribute '{attr_name}' already exists. Replace it?")
+                    if not result:
+                        return
+                
+                # Add to XML
+                element.attrib[attr_name] = attr_value
+                
+                # Update displays
+                self.refresh_attribute_display(element)
+                self.update_tree_item_text(tree_item, element)
+                self.mark_modified()
+                
+                # Select the new attribute
+                for item_id in self.attr_tree.get_children():
+                    if self.attr_tree.item(item_id, "text") == attr_name:
+                        self.attr_tree.selection_set(item_id)
+                        self.attr_tree.focus(item_id)
+                        break
+                
+                self.status_var.set(f"Added attribute: {attr_name}")
+    
     def refresh_attribute_display(self, element):
         """Refresh the attribute display with enhanced formatting"""
         # Clear and rebuild the attribute tree
@@ -1651,7 +1730,38 @@ class GameXMLEditor:
             # Add tooltip for long values
             if len(str(attr_value)) > 50:
                 self.attr_tree.set(item_id, "value", display_value + " [...]")
+    
+    def delete_attribute(self):
+        """Delete selected attribute with enhanced confirmation"""
+        selection = self.attr_tree.selection()
+        if not selection:
+            self.show_custom_messagebox("No Selection", "Please select an attribute to delete.", "warning")
+            return
         
+        item = selection[0]
+        attr_name = self.attr_tree.item(item, "text")
+        
+        # Enhanced confirmation dialog
+        result = messagebox.askyesno("Confirm Delete", 
+                                   f"Are you sure you want to delete attribute '{attr_name}'?\n\n"
+                                   f"This action cannot be undone.")
+        if result:
+            # Remove from XML
+            tree_selection = self.tree.selection()
+            if tree_selection:
+                tree_item = tree_selection[0]
+                if tree_item in self.element_map:
+                    element = self.element_map[tree_item]
+                    if attr_name in element.attrib:
+                        del element.attrib[attr_name]
+                    
+                    # Update displays
+                    self.refresh_attribute_display(element)
+                    self.update_tree_item_text(tree_item, element)
+                    self.mark_modified()
+                    
+                    self.status_var.set(f"Deleted attribute: {attr_name}")
+    
     def mark_modified(self):
         """Mark the document as modified with visual indicators"""
         if not self.is_modified:
