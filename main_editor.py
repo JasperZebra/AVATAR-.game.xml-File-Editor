@@ -67,7 +67,7 @@ class GameXMLEditor:
     
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("AVATAR XML File Editor | Made By: Jasper_Zebra | version 2.0")
+        self.root.title("AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.0")
         self.root.geometry("1800x1100")
         
         # Apply dark theme
@@ -98,7 +98,7 @@ class GameXMLEditor:
         if not self.converter.can_convert:
             self.status_var.set("WARNING: File conversion disabled - missing tools/dependencies")
         else:
-            self.status_var.set("Ready - AVATAR XML File Editor | Made By: Jasper_Zebra | version 2.0")
+            self.status_var.set("Ready - AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.0")
     
     def setup_dark_theme(self):
         """Configure dark theme for the application"""
@@ -369,173 +369,6 @@ class GameXMLEditor:
         update_menu.add_command(label="View Changelog", command=self.view_changelog)
         update_menu.add_command(label="Download Latest", command=self.download_latest)
     
-    def check_for_updates(self):
-        """Check for updates and download if available"""
-        try:
-            import urllib.request
-            import os
-            import zipfile
-            import shutil
-            import subprocess
-            import sys
-            
-            # Your current version
-            current_version = "2.0"
-            latest_version = "2.0"  # Update this manually when you release new versions
-            
-            if latest_version > current_version:
-                message = f"""A new version is available!
-
-    Current version: {current_version}
-    Latest version: {latest_version}
-
-    This will download and install the update automatically.
-    The application will restart after the update.
-
-    Would you like to download and install now?"""
-                
-                result = self.show_custom_messagebox_with_result(
-                    "Update Available",
-                    message,
-                    "info"
-                )
-                
-                if result:
-                    self.download_and_install_update()
-            else:
-                self.show_custom_messagebox(
-                    "Up to Date",
-                    f"You're running the latest version ({current_version})!",
-                    "info"
-                )
-                
-        except Exception as e:
-            self.show_custom_messagebox(
-                "Update Error",
-                f"Error checking for updates:\n{str(e)}",
-                "error"
-            )
-
-    def download_and_install_update(self):
-        """Download and install the update"""
-        try:
-            import urllib.request
-            import os
-            import zipfile
-            import tempfile
-            import shutil
-            import subprocess
-            import sys
-            
-            # Show downloading message
-            self.status_var.set("Downloading update...")
-            self.root.update()
-            
-            # Download URL - update this with each new release
-            download_url = "https://github.com/JasperZebra/AVATAR-.game.xml-File-Editor/releases/download/V2.0/AVATAR_XML_File_Editor_V2.0.zip"
-            
-            # Create temp directory
-            temp_dir = tempfile.mkdtemp()
-            zip_path = os.path.join(temp_dir, "update.zip")
-            
-            # Download the file
-            urllib.request.urlretrieve(download_url, zip_path)
-            
-            self.status_var.set("Extracting update...")
-            self.root.update()
-            
-            # Extract the zip to temp directory
-            extract_dir = os.path.join(temp_dir, "extracted")
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(extract_dir)
-            
-            # Get current application directory
-            if getattr(sys, 'frozen', False):
-                # Running as exe
-                current_dir = os.path.dirname(sys.executable)
-                current_exe = sys.executable
-            else:
-                # Running as script
-                current_dir = os.path.dirname(os.path.abspath(__file__))
-                current_exe = __file__
-            
-            self.status_var.set("Preparing update...")
-            self.root.update()
-            
-            # Create a batch file that will handle the update after app closes
-            batch_script = f'''@echo off
-            echo Waiting for application to close...
-            timeout /t 5 /nobreak >nul
-
-            echo Installing update...
-
-            REM Copy all files from extracted directory to current directory
-            xcopy "{extract_dir}" "{current_dir}" /E /Y /Q /I
-
-            echo Cleaning up...
-            REM Clean up temp directory
-            rmdir /s /q "{temp_dir}"
-
-            echo Update complete!
-
-            REM Ask if user wants to open new version
-            choice /c YN /m "Update installed successfully! Would you like to open the new version (Y/N)?"
-            if errorlevel 2 goto end
-            if errorlevel 1 goto start
-
-            :start
-            REM Find and start the main exe
-            if exist "{current_dir}\\AVATAR_XML_File_Editor.exe" (
-                start "" "{current_dir}\\AVATAR_XML_File_Editor.exe"
-            ) else if exist "{current_dir}\\main.exe" (
-                start "" "{current_dir}\\main.exe"
-            ) else (
-                for %%f in ("{current_dir}\\*.exe") do (
-                    start "" "%%f"
-                    goto end
-                )
-            )
-
-            :end
-            del "%~f0"
-            '''
-            
-            # Save batch script
-            batch_path = os.path.join(temp_dir, "update.bat")
-            with open(batch_path, 'w') as f:
-                f.write(batch_script)
-            
-            # Show success message
-            self.show_custom_messagebox(
-                "Download Complete",
-                "Update downloaded successfully!\n\nThe application will now close and update automatically.",
-                "info"
-            )
-            
-            # Run batch script and close
-            subprocess.Popen([batch_path], shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)
-            
-            # Give a moment for the batch to start, then quit
-            self.root.after(1000, self.root.quit)
-            
-        except Exception as e:
-            self.show_custom_messagebox(
-                "Download Error",
-                f"Failed to download update:\n{str(e)}",
-                "error"
-            )
-            self.status_var.set("Update failed")
-
-    def view_changelog(self):
-        """Open changelog/releases page"""
-        import webbrowser
-        webbrowser.open("https://github.com/JasperZebra/AVATAR-.game.xml-File-Editor/releases")
-
-    def download_latest(self):
-        """Open download page for latest version"""
-        import webbrowser
-        webbrowser.open("https://github.com/JasperZebra/AVATAR-.game.xml-File-Editor/releases")
-
     def create_toolbar(self):
         """Create the modern toolbar with dark theme"""
         # Main toolbar frame with dark background
@@ -1021,7 +854,7 @@ class GameXMLEditor:
         
         # Version
         version_label = ttk.Label(main_frame, 
-                                 text="version 2.0",
+                                 text="Version 2.0",
                                  font=('Segoe UI', 10))
         version_label.pack(pady=(0, 20))
         
@@ -1215,7 +1048,7 @@ class GameXMLEditor:
             self.file_info_label.config(text=f"📄 {os.path.basename(filename)}")
             
             # Update window title
-            self.root.title(f"AVATAR XML File Editor | Made By: Jasper_Zebra | version 2.0 | Current XML File Loaded: {os.path.basename(filename)}")
+            self.root.title(f"AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.0 | Current XML File Loaded: {os.path.basename(filename)}")
             self.status_var.set(f"Loaded: {filename}")
             
             # Update statistics
