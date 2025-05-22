@@ -67,8 +67,8 @@ class GameXMLEditor:
     
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("AVATAR .game.xml File Editor | Made By: Jasper_Zebra | Version 1.5")
-        self.root.geometry("1400x900")
+        self.root.title("AVATAR XML File Editor | Made By: Jasper_Zebra | version 2.0")
+        self.root.geometry("1800x1100")
         
         # Apply dark theme
         self.setup_dark_theme()
@@ -82,6 +82,10 @@ class GameXMLEditor:
         self.is_modified = False
         self.element_map = {}
         
+        # NEW: Track source modifications separately
+        self.source_modified = False
+        self.updating_source = False  # Flag to prevent recursive updates
+        
         # Create GUI
         self.create_menu()
         self.create_toolbar()
@@ -94,7 +98,7 @@ class GameXMLEditor:
         if not self.converter.can_convert:
             self.status_var.set("WARNING: File conversion disabled - missing tools/dependencies")
         else:
-            self.status_var.set("Ready - Game XML Editor")
+            self.status_var.set("Ready - AVATAR XML File Editor | Made By: Jasper_Zebra | version 2.0")
     
     def setup_dark_theme(self):
         """Configure dark theme for the application"""
@@ -220,8 +224,8 @@ class GameXMLEditor:
         """Show welcome dialog similar to simplified map editor"""
         # Create a custom dark-themed message box
         welcome_window = tk.Toplevel(self.root)
-        welcome_window.title("Welcome to Game XML Editor")
-        welcome_window.geometry("500x400")
+        welcome_window.title("Welcome to AVATAR XML File Editor")
+        welcome_window.geometry("600x500")
         welcome_window.configure(bg=DarkTheme.BG_DARK)
         welcome_window.resizable(False, False)
         welcome_window.transient(self.root)
@@ -239,24 +243,30 @@ class GameXMLEditor:
         
         # Title
         title_label = ttk.Label(main_frame, 
-                               text="🎮 Game XML Editor",
-                               font=('Segoe UI', 16, 'bold'),
+                               text="🎮 AVATAR XML File Editor",
+                               font=('Segoe UI', 26, 'bold'),
                                foreground=DarkTheme.ACCENT_BLUE)
         title_label.pack(pady=(0, 20))
         
         # Description
-        desc_text = """Welcome to the Game XML Editor!
+        desc_text = """Welcome to Jasper's XML Editor!
 
-This editor allows you to:
+        🎮 Designed specifically for AVATAR game file editing
 
-• Open and edit .game.xml files
-• Convert between binary and readable XML formats
-• Navigate XML structure with tree view
-• Edit elements, attributes, and text content
-• Search and find elements
-• Pretty-print XML output
+        What you can do:
+        - Load .game.xml, .xml, and .rml game files
+        - Convert binary formats to editable XML
+        - Browse file structure with the interactive tree view
+        - Edit XML content directly in the source tab
+        - Search through large files with Ctrl+F
+        - Validate XML syntax in real-time
+        - Save back to binary format for the game
 
-Use 'Open Game XML...' to get started!"""
+        ✨ Features a modern dark theme and intuitive interface
+        🔧 Powered by Gibbed Dunia conversion tools
+
+        Ready to start modding? Click 'Select XML File' to begin!"""
+
         
         desc_label = ttk.Label(main_frame, 
                               text=desc_text,
@@ -294,7 +304,7 @@ Use 'Open Game XML...' to get started!"""
                            activeforeground=DarkTheme.SELECTION_FG,
                            font=('Segoe UI', 9))
         menubar.add_cascade(label="File", menu=file_menu)
-        file_menu.add_command(label="Open Game XML...", command=self.open_file, 
+        file_menu.add_command(label="Select XML File", command=self.open_file, 
                              accelerator="Ctrl+O")
         file_menu.add_separator()
         file_menu.add_command(label="Save", command=self.save_file, 
@@ -345,7 +355,187 @@ Use 'Open Game XML...' to get started!"""
         self.root.bind('<Control-o>', lambda e: self.open_file())
         self.root.bind('<Control-s>', lambda e: self.save_file())
         self.root.bind('<Control-f>', lambda e: self.show_find_dialog())
+
+        # Update menu
+        update_menu = tk.Menu(menubar, tearoff=0, 
+                            bg=DarkTheme.MENU_BG, 
+                            fg=DarkTheme.MENU_FG,
+                            selectcolor=DarkTheme.ACCENT_BLUE, 
+                            activebackground=DarkTheme.SELECTION_BG,
+                            activeforeground=DarkTheme.SELECTION_FG,
+                            font=('Segoe UI', 9))
+        menubar.add_cascade(label="Update", menu=update_menu)
+        update_menu.add_command(label="Check for Updates", command=self.check_for_updates)
+        update_menu.add_command(label="View Changelog", command=self.view_changelog)
+        update_menu.add_command(label="Download Latest", command=self.download_latest)
     
+    def check_for_updates(self):
+        """Check for updates and download if available"""
+        try:
+            import urllib.request
+            import os
+            import zipfile
+            import shutil
+            import subprocess
+            import sys
+            
+            # Your current version
+            current_version = "2.0"
+            latest_version = "2.0"  # Update this manually when you release new versions
+            
+            if latest_version > current_version:
+                message = f"""A new version is available!
+
+    Current version: {current_version}
+    Latest version: {latest_version}
+
+    This will download and install the update automatically.
+    The application will restart after the update.
+
+    Would you like to download and install now?"""
+                
+                result = self.show_custom_messagebox_with_result(
+                    "Update Available",
+                    message,
+                    "info"
+                )
+                
+                if result:
+                    self.download_and_install_update()
+            else:
+                self.show_custom_messagebox(
+                    "Up to Date",
+                    f"You're running the latest version ({current_version})!",
+                    "info"
+                )
+                
+        except Exception as e:
+            self.show_custom_messagebox(
+                "Update Error",
+                f"Error checking for updates:\n{str(e)}",
+                "error"
+            )
+
+    def download_and_install_update(self):
+        """Download and install the update"""
+        try:
+            import urllib.request
+            import os
+            import zipfile
+            import tempfile
+            import shutil
+            import subprocess
+            import sys
+            
+            # Show downloading message
+            self.status_var.set("Downloading update...")
+            self.root.update()
+            
+            # Download URL - update this with each new release
+            download_url = "https://github.com/JasperZebra/AVATAR-.game.xml-File-Editor/releases/download/V2.0/AVATAR_XML_File_Editor_V2.0.zip"
+            
+            # Create temp directory
+            temp_dir = tempfile.mkdtemp()
+            zip_path = os.path.join(temp_dir, "update.zip")
+            
+            # Download the file
+            urllib.request.urlretrieve(download_url, zip_path)
+            
+            self.status_var.set("Extracting update...")
+            self.root.update()
+            
+            # Extract the zip to temp directory
+            extract_dir = os.path.join(temp_dir, "extracted")
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+            
+            # Get current application directory
+            if getattr(sys, 'frozen', False):
+                # Running as exe
+                current_dir = os.path.dirname(sys.executable)
+                current_exe = sys.executable
+            else:
+                # Running as script
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                current_exe = __file__
+            
+            self.status_var.set("Preparing update...")
+            self.root.update()
+            
+            # Create a batch file that will handle the update after app closes
+            batch_script = f'''@echo off
+            echo Waiting for application to close...
+            timeout /t 5 /nobreak >nul
+
+            echo Installing update...
+
+            REM Copy all files from extracted directory to current directory
+            xcopy "{extract_dir}" "{current_dir}" /E /Y /Q /I
+
+            echo Cleaning up...
+            REM Clean up temp directory
+            rmdir /s /q "{temp_dir}"
+
+            echo Update complete!
+
+            REM Ask if user wants to open new version
+            choice /c YN /m "Update installed successfully! Would you like to open the new version (Y/N)?"
+            if errorlevel 2 goto end
+            if errorlevel 1 goto start
+
+            :start
+            REM Find and start the main exe
+            if exist "{current_dir}\\AVATAR_XML_File_Editor.exe" (
+                start "" "{current_dir}\\AVATAR_XML_File_Editor.exe"
+            ) else if exist "{current_dir}\\main.exe" (
+                start "" "{current_dir}\\main.exe"
+            ) else (
+                for %%f in ("{current_dir}\\*.exe") do (
+                    start "" "%%f"
+                    goto end
+                )
+            )
+
+            :end
+            del "%~f0"
+            '''
+            
+            # Save batch script
+            batch_path = os.path.join(temp_dir, "update.bat")
+            with open(batch_path, 'w') as f:
+                f.write(batch_script)
+            
+            # Show success message
+            self.show_custom_messagebox(
+                "Download Complete",
+                "Update downloaded successfully!\n\nThe application will now close and update automatically.",
+                "info"
+            )
+            
+            # Run batch script and close
+            subprocess.Popen([batch_path], shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)
+            
+            # Give a moment for the batch to start, then quit
+            self.root.after(1000, self.root.quit)
+            
+        except Exception as e:
+            self.show_custom_messagebox(
+                "Download Error",
+                f"Failed to download update:\n{str(e)}",
+                "error"
+            )
+            self.status_var.set("Update failed")
+
+    def view_changelog(self):
+        """Open changelog/releases page"""
+        import webbrowser
+        webbrowser.open("https://github.com/JasperZebra/AVATAR-.game.xml-File-Editor/releases")
+
+    def download_latest(self):
+        """Open download page for latest version"""
+        import webbrowser
+        webbrowser.open("https://github.com/JasperZebra/AVATAR-.game.xml-File-Editor/releases")
+
     def create_toolbar(self):
         """Create the modern toolbar with dark theme"""
         # Main toolbar frame with dark background
@@ -357,7 +547,7 @@ Use 'Open Game XML...' to get started!"""
         file_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
         
         # Open button with icon-like styling
-        open_button = ttk.Button(file_frame, text="📁 Open Game XML", 
+        open_button = ttk.Button(file_frame, text="📁 Select XML File", 
                                 command=self.open_file, width=20)
         open_button.pack(side=tk.LEFT, padx=2)
         
@@ -401,13 +591,10 @@ Use 'Open Game XML...' to get started!"""
         main_container = ttk.Frame(self.root)
         main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
-        # Create horizontal paned window for resizable layout
-        paned = ttk.PanedWindow(main_container, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True)
-        
-        # Left panel - XML Tree view
-        left_panel = ttk.LabelFrame(paned, text="📁 XML Structure", padding=10)
-        paned.add(left_panel, weight=1)
+        # Left panel - XML Tree view with fixed width
+        left_panel = ttk.LabelFrame(main_container, text="📁 XML Structure", padding=10, width=300)
+        left_panel.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 5))
+        left_panel.pack_propagate(False)  # Keep the fixed width
         
         # Tree controls frame
         tree_controls = ttk.Frame(left_panel)
@@ -440,20 +627,17 @@ Use 'Open Game XML...' to get started!"""
         # Bind tree events
         self.tree.bind('<<TreeviewSelect>>', self.on_tree_select)
         
-        # Right panel - Element details with tabs
-        right_panel = ttk.LabelFrame(paned, text="🔧 Element Details", padding=10)
-        paned.add(right_panel, weight=1)
+        # Right panel - Element details with tabs (takes remaining space)
+        right_panel = ttk.LabelFrame(main_container, text="🔧 XML Details", padding=10)
+        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
         
         # Create notebook for tabbed interface
         self.notebook = ttk.Notebook(right_panel)
         self.notebook.pack(fill=tk.BOTH, expand=True)
         
-        # Properties tab
-        properties_frame = ttk.Frame(self.notebook)
-        self.notebook.add(properties_frame, text="Properties")
-        
-        self.create_properties_tab(properties_frame)
-        
+        # Bind tab change event to handle source sync
+        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
+                
         # XML Source tab
         source_frame = ttk.Frame(self.notebook)
         self.notebook.add(source_frame, text="XML Source")
@@ -465,7 +649,7 @@ Use 'Open Game XML...' to get started!"""
         self.notebook.add(stats_frame, text="Statistics")
         
         self.create_statistics_tab(stats_frame)
-    
+
     def create_properties_tab(self, parent):
         """Create the properties tab for element editing"""
         # Element information section
@@ -534,31 +718,81 @@ Use 'Open Game XML...' to get started!"""
         self.attr_tree.bind('<Double-1>', self.edit_attribute)
     
     def create_source_tab(self, parent):
-        """Create the XML source view tab with dark theme"""
+        """Create the XML source view tab with dark theme and editing capabilities"""
         source_frame = ttk.Frame(parent)
         source_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Source text widget with scrollbars and dark theme
+        # NEW: Search bar frame
+        search_frame = ttk.Frame(source_frame)
+        search_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        # Search controls
+        ttk.Label(search_frame, text="Search:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.search_var = tk.StringVar()
+        self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var, width=30)
+        self.search_entry.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Search buttons
+        ttk.Button(search_frame, text="Find", command=self.find_text, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_frame, text="Next", command=self.find_next, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_frame, text="Previous", command=self.find_previous, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_frame, text="Clear", command=self.clear_search, width=8).pack(side=tk.LEFT, padx=2)
+        
+        # Case sensitive checkbox
+        self.case_sensitive_var = tk.BooleanVar()
+        ttk.Checkbutton(search_frame, text="Case sensitive", 
+                    variable=self.case_sensitive_var).pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Search result label
+        self.search_result_label = ttk.Label(search_frame, text="", foreground=DarkTheme.ACCENT_BLUE)
+        self.search_result_label.pack(side=tk.RIGHT)
+        
+        # Source text widget with scrollbars and dark theme - MADE EDITABLE
         text_frame = ttk.Frame(source_frame)
         text_frame.pack(fill=tk.BOTH, expand=True)
         
         self.source_text = tk.Text(text_frame, wrap=tk.NONE, 
-                                  font=('Consolas', 10),
-                                  bg=DarkTheme.BG_LIGHT, 
-                                  fg=DarkTheme.FG_NORMAL, 
-                                  insertbackground=DarkTheme.ACCENT_BLUE,
-                                  selectbackground=DarkTheme.SELECTION_BG,
-                                  selectforeground=DarkTheme.SELECTION_FG,
-                                  borderwidth=1,
-                                  relief='solid')
+                                font=('Consolas', 10),
+                                bg=DarkTheme.BG_LIGHT, 
+                                fg=DarkTheme.FG_NORMAL, 
+                                insertbackground=DarkTheme.ACCENT_BLUE,
+                                selectbackground=DarkTheme.SELECTION_BG,
+                                selectforeground=DarkTheme.SELECTION_FG,
+                                borderwidth=1,
+                                relief='solid',
+                                state=tk.NORMAL)
+        
+        # Configure search highlighting tag with more visible colors
+        self.source_text.tag_configure("search_highlight", 
+                                    background="#000000",  # Bright yellow
+                                    foreground="#000000")  # Black text
+        self.source_text.tag_configure("current_match", 
+                                    background="#ffffff",  # Bright orange  
+                                    foreground="#ffffff")  # White text
+        
+        # Bind text modification events
+        self.source_text.bind('<KeyRelease>', self.on_source_text_change)
+        self.source_text.bind('<Button-1>', self.on_source_text_change)
+        self.source_text.bind('<Control-v>', self.on_source_text_change)
+        
+        # NEW: Bind Ctrl+F for search
+        self.source_text.bind('<Control-f>', self.focus_search)
+        self.source_text.bind('<F3>', lambda e: self.find_next())
+        self.source_text.bind('<Shift-F3>', lambda e: self.find_previous())
+        self.source_text.bind('<Escape>', self.clear_search)
+        
+        # Bind Enter in search box
+        self.search_entry.bind('<Return>', lambda e: self.find_next())
+        self.search_entry.bind('<Escape>', self.clear_search)
         
         # Scrollbars for source text
         source_scrolly = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, 
-                                      command=self.source_text.yview)
+                                    command=self.source_text.yview)
         source_scrollx = ttk.Scrollbar(text_frame, orient=tk.HORIZONTAL, 
-                                      command=self.source_text.xview)
+                                    command=self.source_text.xview)
         self.source_text.configure(yscrollcommand=source_scrolly.set, 
-                                  xscrollcommand=source_scrollx.set)
+                                xscrollcommand=source_scrollx.set)
         
         self.source_text.grid(row=0, column=0, sticky="nsew")
         source_scrolly.grid(row=0, column=1, sticky="ns")
@@ -570,10 +804,141 @@ Use 'Open Game XML...' to get started!"""
         source_controls = ttk.Frame(source_frame)
         source_controls.pack(fill=tk.X, pady=(10, 0))
         
-        ttk.Button(source_controls, text="🔄 Refresh", 
-                  command=self.refresh_source_view).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(source_controls, text="🔄 Refresh from Tree", 
+                command=self.refresh_source_view).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(source_controls, text="📋 Copy All", 
-                  command=self.copy_source).pack(side=tk.LEFT, padx=(0, 5))
+                command=self.copy_source).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(source_controls, text="✅ Apply Changes to Tree", 
+                command=self.apply_source_changes).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(source_controls, text="🔍 Validate XML", 
+                command=self.validate_source_xml).pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Initialize search variables
+        self.search_matches = []
+        self.current_match_index = -1
+
+    # NEW SEARCH METHODS - Add these to your GameXMLEditor class
+
+    def focus_search(self, event=None):
+        """Focus on the search entry box"""
+        if hasattr(self, 'search_entry'):
+            self.search_entry.focus_set()
+            self.search_entry.select_range(0, tk.END)
+        return "break"  # Prevent default Ctrl+F behavior
+
+    def find_text(self):
+        """Find all occurrences of search text"""
+        search_term = self.search_var.get()
+        if not search_term:
+            self.clear_search()
+            return
+        
+        # Clear previous highlights
+        self.source_text.tag_remove("search_highlight", "1.0", tk.END)
+        self.source_text.tag_remove("current_match", "1.0", tk.END)
+        
+        # Get all text content
+        content = self.source_text.get("1.0", tk.END)
+        
+        # Search options
+        if not self.case_sensitive_var.get():
+            content_lower = content.lower()
+            search_term_lower = search_term.lower()
+        else:
+            content_lower = content
+            search_term_lower = search_term
+        
+        # Find all matches
+        self.search_matches = []
+        start = 0
+        while True:
+            pos = content_lower.find(search_term_lower, start)
+            if pos == -1:
+                break
+            
+            # Convert position to line.column format
+            lines_before = content[:pos].count('\n')
+            if lines_before == 0:
+                col = pos
+            else:
+                last_newline = content.rfind('\n', 0, pos)
+                col = pos - last_newline - 1
+            
+            start_pos = f"{lines_before + 1}.{col}"
+            end_pos = f"{lines_before + 1}.{col + len(search_term)}"
+            
+            self.search_matches.append((start_pos, end_pos))
+            start = pos + 1
+        
+        # Highlight all matches
+        for start_pos, end_pos in self.search_matches:
+            self.source_text.tag_add("search_highlight", start_pos, end_pos)
+        
+        # Update result display
+        if self.search_matches:
+            self.current_match_index = 0
+            self.highlight_current_match()
+            self.search_result_label.config(text=f"{len(self.search_matches)} matches found")
+        else:
+            self.search_result_label.config(text="No matches found")
+            self.current_match_index = -1
+
+    def find_next(self):
+        """Find next occurrence"""
+        if not self.search_matches:
+            self.find_text()
+            return
+        
+        if self.search_matches:
+            self.current_match_index = (self.current_match_index + 1) % len(self.search_matches)
+            self.highlight_current_match()
+
+    def find_previous(self):
+        """Find previous occurrence"""
+        if not self.search_matches:
+            self.find_text()
+            return
+        
+        if self.search_matches:
+            self.current_match_index = (self.current_match_index - 1) % len(self.search_matches)
+            self.highlight_current_match()
+
+    def highlight_current_match(self):
+        """Highlight the current match and scroll to it"""
+        if self.current_match_index >= 0 and self.current_match_index < len(self.search_matches):
+            # Remove previous current match highlight
+            self.source_text.tag_remove("current_match", "1.0", tk.END)
+            
+            # Get current match position
+            start_pos, end_pos = self.search_matches[self.current_match_index]
+            
+            # Highlight current match
+            self.source_text.tag_add("current_match", start_pos, end_pos)
+            
+            # Scroll to current match
+            self.source_text.see(start_pos)
+            
+            # Update result label
+            self.search_result_label.config(
+                text=f"Match {self.current_match_index + 1} of {len(self.search_matches)}"
+            )
+
+    def clear_search(self, event=None):
+        """Clear search highlights and results"""
+        if hasattr(self, 'source_text'):
+            self.source_text.tag_remove("search_highlight", "1.0", tk.END)
+            self.source_text.tag_remove("current_match", "1.0", tk.END)
+        
+        if hasattr(self, 'search_var'):
+            self.search_var.set("")
+        
+        if hasattr(self, 'search_result_label'):
+            self.search_result_label.config(text="")
+        
+        self.search_matches = []
+        self.current_match_index = -1
+        
+        return "break"  # Prevent default Escape behavior
     
     def create_statistics_tab(self, parent):
         """Create the statistics tab with dark theme"""
@@ -626,28 +991,12 @@ Use 'Open Game XML...' to get started!"""
         stats_tree_frame.grid_rowconfigure(0, weight=1)
         stats_tree_frame.grid_columnconfigure(0, weight=1)
     
-    def create_status_bar(self):
-        """Create modern status bar with dark theme"""
-        status_frame = ttk.Frame(self.root)
-        status_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=5)
-        
-        # Status text
-        self.status_var = tk.StringVar()
-        status_label = ttk.Label(status_frame, textvariable=self.status_var,
-                                relief=tk.SUNKEN, font=('Segoe UI', 9))
-        status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        
-        # Add file status indicators
-        self.modified_indicator = ttk.Label(status_frame, text="", 
-                                           font=('Segoe UI', 9, 'bold'))
-        self.modified_indicator.pack(side=tk.RIGHT, padx=(10, 0))
-    
     def show_about(self):
         """Show about dialog with dark theme"""
         # Create a custom dark-themed about dialog
         about_window = tk.Toplevel(self.root)
-        about_window.title("About Game XML Editor")
-        about_window.geometry("500x400")
+        about_window.title("About AVATAR XML Editor")
+        about_window.geometry("600x500")
         about_window.configure(bg=DarkTheme.BG_DARK)
         about_window.resizable(False, False)
         about_window.transient(self.root)
@@ -665,31 +1014,37 @@ Use 'Open Game XML...' to get started!"""
         
         # Title
         title_label = ttk.Label(main_frame, 
-                               text="🎮 Game XML Editor",
-                               font=('Segoe UI', 16, 'bold'),
+                               text="🎮 AVATAR XML Editor",
+                               font=('Segoe UI', 26, 'bold'),
                                foreground=DarkTheme.ACCENT_BLUE)
         title_label.pack(pady=(0, 10))
         
         # Version
         version_label = ttk.Label(main_frame, 
-                                 text="Version 1.0",
+                                 text="version 2.0",
                                  font=('Segoe UI', 10))
         version_label.pack(pady=(0, 20))
         
         # Description
-        desc_text = """A modern tool for editing .game.xml files.
+        desc_text = """A powerful XML editor designed for AVATAR game files.
 
-Features:
-• Binary to XML conversion
-• Tree-based XML editing
-• Real-time validation
-• Modern dark theme interface
+        Key Features:
+        - Open and edit .game.xml, .xml, and .rml files
+        - Convert binary game files to readable XML format
+        - Live XML source editing with syntax highlighting
+        - Tree-based navigation and element management
+        - Real-time XML validation and error checking
+        - Search functionality with Ctrl+F support
+        - Modern dark theme for comfortable editing
+        - Integrated Gibbed Dunia conversion tools
 
-Built with Python and tkinter"""
-        
+        Perfect for modding and analyzing AVATAR game data files.
+
+        Built with Python and tkinter for reliable performance."""        
+
         desc_label = ttk.Label(main_frame, 
                               text=desc_text,
-                              font=('Segoe UI', 9),
+                              font=('Segoe UI', 10),
                               justify=tk.CENTER)
         desc_label.pack(pady=(0, 20))
         
@@ -726,10 +1081,10 @@ Built with Python and tkinter"""
         msg_window.transient(self.root)
         msg_window.grab_set()
         
-        # Calculate size based on message length - MODIFY THESE VALUES
+        # Calculate size based on message length
         lines = message.split('\n')
-        width = max(400, max(len(line) * 9 for line in lines) + 120)  # Increased from 300 to 400
-        height = max(200, len(lines) * 30 + 150)  # Increased from 150 to 200 and multiplier from 25 to 30
+        width = max(400, max(len(line) * 9 for line in lines) + 120)
+        height = max(200, len(lines) * 30 + 150)
         msg_window.geometry(f"{width}x{height}")
         
         # Center the window
@@ -757,26 +1112,26 @@ Built with Python and tkinter"""
             icon = "ℹ️"
             color = DarkTheme.ACCENT_BLUE
         
-        icon_label = ttk.Label(icon_frame, text=icon, font=('Segoe UI', 18))  # Increased font size from 16 to 18
+        icon_label = ttk.Label(icon_frame, text=icon, font=('Segoe UI', 18))
         icon_label.pack(side=tk.LEFT)
         
         title_label = ttk.Label(icon_frame, text=title, 
-                            font=('Segoe UI', 14, 'bold'),  # Increased font size from 12 to 14
+                            font=('Segoe UI', 14, 'bold'),
                             foreground=color)
         title_label.pack(side=tk.LEFT, padx=(10, 0))
         
         # Message
         msg_label = ttk.Label(main_frame, text=message,
-                            font=('Segoe UI', 11),  # Increased font size from 10 to 11
+                            font=('Segoe UI', 11),
                             justify=tk.LEFT,
-                            wraplength=width-60)  # Increased wraplength from width-40 to width-60
+                            wraplength=width-60)
         msg_label.pack(pady=(0, 20))
         
         # OK button
         ok_button = ttk.Button(main_frame, 
                             text="OK",
                             command=msg_window.destroy,
-                            width=15)  # Increased width from 10 to 15
+                            width=15)
         ok_button.pack()
         
         # Focus and wait
@@ -784,32 +1139,46 @@ Built with Python and tkinter"""
         msg_window.wait_window()
 
     def open_file(self):
-        """Open a .game.xml file with better file handling"""
+        """Select a binary .xml file to convert and make readable!"""
         filetypes = [
             ("Game XML files", "*.game.xml"),
             ("XML files", "*.xml"),
+            ("RML files", "*.rml"),
+            ("All supported files", "*.game.xml;*.xml;*.rml"),
             ("All files", "*.*")
         ]
         
         filename = filedialog.askopenfilename(
-            title="Open Game XML File",
+            title="Open Game XML/RML File",
             filetypes=filetypes
         )
         
         if filename:
             self.load_file(filename)
-    
+
     def load_file(self, filename):
         """Load and display a .game.xml file with enhanced error handling"""
         try:
-            # Check if file is in readable format
-            if not self.converter.is_file_xml_format(filename):
+            # Reset modification flags
+            self.source_modified = False
+            
+            # Determine if we need to convert based on file extension and format
+            needs_conversion = False
+            base, ext = os.path.splitext(filename)
+            
+            if ext == '.rml':
+                # RML files always need conversion
+                needs_conversion = True
+            else:
+                # Check if other files are in readable format
+                needs_conversion = not self.converter.is_file_xml_format(filename)
+            
+            if needs_conversion:
                 # Ask user if they want to convert using custom messagebox
                 result = self.show_custom_messagebox_with_result(
                     "Binary Format Detected",
-                    "This .game.xml file appears to be in binary format.\n\n"
-                    "Would you like to convert it to readable XML format?\n\n"
-                    "Note: You can enable `auto_backup` to create backups.",
+                    f"This {ext} file appears to be in binary format.\n\n"
+                    "Would you like to convert it to readable XML format?",
                     "question"
                 )
                 
@@ -819,6 +1188,15 @@ Built with Python and tkinter"""
                         self.show_custom_messagebox("Conversion Failed", message, "error")
                         return
                     self.show_custom_messagebox("Conversion Successful", message, "info")
+                    
+                    # For .rml files, we need to load the generated .xml file
+                    if ext == '.rml':
+                        xml_filename = base + '.xml'
+                        if os.path.exists(xml_filename):
+                            filename = xml_filename
+                        else:
+                            self.show_custom_messagebox("Error", "Converted XML file not found", "error")
+                            return
                 else:
                     self.show_custom_messagebox("Cannot Edit",
                                             "Cannot edit binary format files. Please convert first.",
@@ -837,7 +1215,7 @@ Built with Python and tkinter"""
             self.file_info_label.config(text=f"📄 {os.path.basename(filename)}")
             
             # Update window title
-            self.root.title(f"Game XML Editor - {os.path.basename(filename)}")
+            self.root.title(f"AVATAR XML File Editor | Made By: Jasper_Zebra | version 2.0 | Current XML File Loaded: {os.path.basename(filename)}")
             self.status_var.set(f"Loaded: {filename}")
             
             # Update statistics
@@ -851,6 +1229,329 @@ Built with Python and tkinter"""
             
         except Exception as e:
             self.show_custom_messagebox("Error", f"Failed to load file:\n{str(e)}", "error")
+
+    def create_status_bar(self):
+        """Create modern status bar with dark theme"""
+        status_frame = ttk.Frame(self.root)
+        status_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=5)
+        
+        # Status text
+        self.status_var = tk.StringVar()
+        status_label = ttk.Label(status_frame, textvariable=self.status_var,
+                                relief=tk.SUNKEN, font=('Segoe UI', 9))
+        status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Add file status indicators
+        self.modified_indicator = ttk.Label(status_frame, text="", 
+                                           font=('Segoe UI', 9, 'bold'))
+        self.modified_indicator.pack(side=tk.RIGHT, padx=(10, 0))
+
+    def on_tab_changed(self, event):
+        """Handle tab change events to sync data between tabs"""
+        try:
+            current_tab = self.notebook.tab(self.notebook.select(), "text")
+            
+            # If switching TO the XML Source tab, refresh it with current tree data
+            if current_tab == "XML Source" and not self.updating_source:
+                self.refresh_source_view()
+            
+            # If switching FROM the XML Source tab and it was modified, ask to apply changes
+            elif self.source_modified and hasattr(self, 'previous_tab') and self.previous_tab == "XML Source":
+                result = self.show_custom_messagebox_with_yesnocancel(
+                    "Source Modified", 
+                    "The XML source has been modified. Do you want to apply the changes to the tree?",
+                    "question"
+                )
+                
+                if result == "yes":  # Yes - apply changes
+                    if self.apply_source_changes():
+                        self.source_modified = False
+                elif result == "no":  # No - discard changes
+                    self.source_modified = False
+                    self.refresh_source_view()  # Reload from tree
+                else:  # Cancel - go back to source tab
+                    # Switch back to source tab
+                    for i in range(self.notebook.index("end")):
+                        if self.notebook.tab(i, "text") == "XML Source":
+                            self.notebook.select(i)
+                            break
+                    return
+            
+            # Store current tab for next time
+            self.previous_tab = current_tab
+            
+        except Exception as e:
+            print(f"Error in tab change handler: {e}")
+
+    def show_custom_messagebox_with_yesnocancel(self, title, message, msg_type="info"):
+        """Show a custom dark-themed message box with Yes/No/Cancel buttons"""
+        result = ["cancel"]  # Default to cancel
+        
+        msg_window = tk.Toplevel(self.root)
+        msg_window.title(title)
+        msg_window.configure(bg=DarkTheme.BG_DARK)
+        msg_window.resizable(False, False)
+        msg_window.transient(self.root)
+        msg_window.grab_set()
+        
+        # Calculate size based on message length
+        lines = message.split('\n')
+        width = max(400, max(len(line) * 9 for line in lines) + 120)
+        height = max(200, len(lines) * 30 + 150)
+        msg_window.geometry(f"{width}x{height}")
+        
+        # Center the window
+        msg_window.geometry("+%d+%d" % (
+            self.root.winfo_rootx() + 200,
+            self.root.winfo_rooty() + 200
+        ))
+        
+        # Main frame
+        main_frame = ttk.Frame(msg_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Icon and title
+        icon_frame = ttk.Frame(main_frame)
+        icon_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        # Choose icon based on type
+        if msg_type == "error":
+            icon = "❌"
+            color = DarkTheme.ACCENT_RED
+        elif msg_type == "warning":
+            icon = "⚠️"
+            color = DarkTheme.ACCENT_ORANGE
+        elif msg_type == "question":
+            icon = "❓"
+            color = DarkTheme.ACCENT_BLUE
+        else:
+            icon = "ℹ️"
+            color = DarkTheme.ACCENT_BLUE
+        
+        icon_label = ttk.Label(icon_frame, text=icon, font=('Segoe UI', 18))
+        icon_label.pack(side=tk.LEFT)
+        
+        title_label = ttk.Label(icon_frame, text=title, 
+                            font=('Segoe UI', 14, 'bold'),
+                            foreground=color)
+        title_label.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Message
+        msg_label = ttk.Label(main_frame, text=message,
+                            font=('Segoe UI', 11),
+                            justify=tk.LEFT,
+                            wraplength=width-60)
+        msg_label.pack(pady=(0, 20))
+        
+        # Button frame for Yes/No/Cancel buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack()
+        
+        def on_yes():
+            result[0] = "yes"
+            msg_window.destroy()
+            
+        def on_no():
+            result[0] = "no"
+            msg_window.destroy()
+            
+        def on_cancel():
+            result[0] = "cancel"
+            msg_window.destroy()
+        
+        # Yes/No/Cancel buttons
+        yes_button = ttk.Button(button_frame, 
+                            text="Yes",
+                            command=on_yes,
+                            width=12)
+        yes_button.pack(side=tk.LEFT, padx=5)
+        
+        no_button = ttk.Button(button_frame, 
+                            text="No",
+                            command=on_no,
+                            width=12)
+        no_button.pack(side=tk.LEFT, padx=5)
+        
+        cancel_button = ttk.Button(button_frame, 
+                                text="Cancel",
+                                command=on_cancel,
+                                width=12)
+        cancel_button.pack(side=tk.LEFT, padx=5)
+        
+        # Focus and wait
+        yes_button.focus_set()
+        msg_window.wait_window()
+        
+        return result[0]
+
+    def on_source_text_change(self, event=None):
+        """Handle changes to the source text widget"""
+        if not self.updating_source and self.tree_data:
+            self.source_modified = True
+            self.mark_modified()
+            self.status_var.set("XML source modified - use 'Apply Changes to Tree' or save to apply")
+
+    def apply_source_changes(self):
+        """Apply changes from the source text widget back to the XML tree"""
+        try:
+            # Get the current source text
+            source_content = self.source_text.get(1.0, tk.END).strip()
+            
+            if not source_content:
+                self.show_custom_messagebox("Error", "Source content is empty.", "error")
+                return False
+            
+            # Try to parse the XML
+            try:
+                # Parse the XML string
+                new_root = ET.fromstring(source_content)
+                
+                # Create a new ElementTree
+                new_tree = ET.ElementTree(new_root)
+                
+                # Replace the current tree data
+                self.tree_data = new_tree
+                self.source_modified = False
+                
+                # Update all displays
+                self.updating_source = True  # Prevent recursive updates
+                try:
+                    self.update_tree_display()
+                    self.update_statistics()
+                    self.refresh_source_view()  # Reformat and re-highlight
+                finally:
+                    self.updating_source = False
+                
+                # Clear any selection and update details
+                self.clear_element_details()
+                
+                self.status_var.set("XML source changes applied successfully")
+                self.show_custom_messagebox("Success", "XML source changes have been applied to the tree structure.", "info")
+                return True
+                
+            except ET.ParseError as e:
+                error_msg = f"XML Parse Error: {str(e)}"
+                self.show_custom_messagebox("Parse Error", error_msg, "error")
+                self.status_var.set("XML parsing failed - check syntax")
+                return False
+                
+        except Exception as e:
+            error_msg = f"Error applying source changes: {str(e)}"
+            self.show_custom_messagebox("Error", error_msg, "error")
+            return False
+
+    def validate_source_xml(self):
+        """Validate the XML syntax in the source text widget"""
+        try:
+            source_content = self.source_text.get(1.0, tk.END).strip()
+            
+            if not source_content:
+                self.show_custom_messagebox("Validation", "Source content is empty.", "warning")
+                return
+            
+            # Try to parse the XML
+            try:
+                ET.fromstring(source_content)
+                self.show_custom_messagebox("Validation Result", "XML syntax is valid!", "info")
+                self.status_var.set("XML validation successful")
+            except ET.ParseError as e:
+                # Get line and column info if available
+                error_info = str(e)
+                if hasattr(e, 'lineno') and hasattr(e, 'offset'):
+                    error_info += f"\nLine: {e.lineno}, Column: {e.offset}"
+                
+                self.show_custom_messagebox("Validation Error", f"XML Parse Error:\n{error_info}", "error")
+                self.status_var.set("XML validation failed")
+                
+        except Exception as e:
+            self.show_custom_messagebox("Validation Error", f"Error during validation: {str(e)}", "error")
+
+    def save_file(self):
+        """Save the current file with enhanced feedback and source sync"""
+        if not self.current_file:
+            self.show_custom_messagebox("No File", "No file is currently open.", "warning")
+            return
+        
+        if not self.tree_data:
+            self.show_custom_messagebox("No Data", "No data to save.", "warning")
+            return
+        
+        # If source was modified, apply changes first
+        if self.source_modified:
+            result = self.show_custom_messagebox_with_result(
+                "Source Modified", 
+                "The XML source has been modified. Apply changes before saving?",
+                "question"
+            )
+            
+            if result:
+                if not self.apply_source_changes():
+                    return  # Don't save if applying changes failed
+            else:
+                self.source_modified = False  # User chose to discard source changes
+        
+        try:
+            from config import EDITOR_SETTINGS
+            if os.path.exists(self.current_file) and EDITOR_SETTINGS.get("auto_backup", False):
+                backup_path = self.current_file + ".backup"
+                import shutil
+                shutil.copy2(self.current_file, backup_path)
+                self.status_var.set(f"Backup created: {os.path.basename(backup_path)}")   
+
+            # Write XML file with pretty formatting
+            self.indent_xml(self.tree_data.getroot())
+            self.tree_data.write(self.current_file, encoding="utf-8", xml_declaration=True)
+            
+            # Reset modification status
+            self.is_modified = False
+            self.source_modified = False
+            self.root.title(self.root.title().rstrip(" *"))
+            self.modified_indicator.config(text="✓", foreground=DarkTheme.ACCENT_GREEN)
+            self.file_info_label.config(text=f"📄 {os.path.basename(self.current_file)}")
+            
+            # Update statistics and source view
+            self.update_statistics()
+            self.refresh_source_view()
+            
+            # Show success message with custom messagebox
+            self.show_custom_messagebox("File Saved", f"Successfully saved: {os.path.basename(self.current_file)}", "info")
+                        
+        except Exception as e:
+            self.show_custom_messagebox("Save Error", f"Failed to save file:\n{str(e)}", "error")
+
+    def refresh_source_view(self):
+        """Refresh the XML source view with dark theme syntax highlighting"""
+        if not self.tree_data:
+            self.source_text.delete(1.0, tk.END)
+            return
+        
+        try:
+            self.updating_source = True  # Prevent modification detection during refresh
+            
+            # Pretty print the XML
+            self.indent_xml(self.tree_data.getroot())
+            xml_str = ET.tostring(self.tree_data.getroot(), 
+                                 encoding='unicode', method='xml')
+            
+            # Add XML declaration
+            if not xml_str.startswith('<?xml'):
+                xml_str = '<?xml version="1.0" encoding="utf-8"?>\n' + xml_str
+            
+            # Update text widget
+            self.source_text.delete(1.0, tk.END)
+            self.source_text.insert(1.0, xml_str)
+            
+            # Apply dark theme syntax highlighting
+            self.apply_dark_highlighting()
+            
+            # Reset modification flag
+            self.source_modified = False
+            
+        except Exception as e:
+            self.source_text.delete(1.0, tk.END)
+            self.source_text.insert(1.0, f"Error generating source view: {str(e)}")
+        finally:
+            self.updating_source = False
 
     def update_statistics(self):
         """Update file and element statistics"""
@@ -905,33 +1606,6 @@ Built with Python and tkinter"""
             return current_depth
         return max(self.calculate_max_depth(child, current_depth + 1) 
                   for child in element)
-    
-    def refresh_source_view(self):
-        """Refresh the XML source view with dark theme syntax highlighting"""
-        if not self.tree_data:
-            self.source_text.delete(1.0, tk.END)
-            return
-        
-        try:
-            # Pretty print the XML
-            self.indent_xml(self.tree_data.getroot())
-            xml_str = ET.tostring(self.tree_data.getroot(), 
-                                 encoding='unicode', method='xml')
-            
-            # Add XML declaration
-            if not xml_str.startswith('<?xml'):
-                xml_str = '<?xml version="1.0" encoding="utf-8"?>\n' + xml_str
-            
-            # Update text widget
-            self.source_text.delete(1.0, tk.END)
-            self.source_text.insert(1.0, xml_str)
-            
-            # Apply dark theme syntax highlighting
-            self.apply_dark_highlighting()
-            
-        except Exception as e:
-            self.source_text.delete(1.0, tk.END)
-            self.source_text.insert(1.0, f"Error generating source view: {str(e)}")
     
     def apply_dark_highlighting(self):
         """Apply dark theme syntax highlighting to XML source"""
@@ -1063,27 +1737,19 @@ Built with Python and tkinter"""
     
     def update_element_details(self, element):
         """Update the element details panel with enhanced information"""
-        # Update tag name
-        self.tag_var.set(element.tag)
-        
-        # Update text content
-        self.text_var.set(element.text or "")
-        
-        # Update attributes using the refresh method
-        self.refresh_attribute_display(element)
-        
+        # Since Properties tab was removed, we'll just update the status bar
         # Update status bar with element info
         attr_count = len(element.attrib)
         child_count = len(list(element))
-        self.status_var.set(f"Selected: {element.tag} | {attr_count} attributes | {child_count} children")
-    
+        text_content = element.text.strip() if element.text else ""
+        text_preview = f" | Text: '{text_content[:30]}...'" if text_content else ""
+        
+        self.status_var.set(f"Selected: {element.tag} | {attr_count} attributes | {child_count} children{text_preview}")
+
     def clear_element_details(self):
         """Clear the element details panel"""
-        self.tag_var.set("")
-        self.text_var.set("")
-        self.attr_tree.delete(*self.attr_tree.get_children())
         self.status_var.set("No element selected")
-    
+
     def on_text_var_change(self, *args):
         """Handle StringVar changes for text content"""
         self.on_text_change(None)
@@ -1134,100 +1800,7 @@ Built with Python and tkinter"""
             display_text += f" [{child_count} children]"
         
         self.tree.item(item, text=display_text)
-    
-    def edit_attribute(self, event, item=None):
-        """Edit selected attribute with improved handling"""
-        if item is None:
-            selection = self.attr_tree.selection()
-            if not selection:
-                return
-            item = selection[0]
         
-        attr_name = self.attr_tree.item(item, "text")
-        attr_values = self.attr_tree.item(item, "values")
-        
-        # Handle case where value might be empty
-        attr_value = attr_values[0] if attr_values else ""
-        
-        # Create edit dialog
-        dialog = AttributeEditDialog(self.root, attr_name, attr_value)
-        
-        # Wait for dialog to complete
-        self.root.wait_window(dialog.dialog)
-        
-        # Check if we have a result
-        if hasattr(dialog, 'result') and dialog.result:
-            new_name, new_value = dialog.result
-            
-            # Update in XML
-            tree_selection = self.tree.selection()
-            if tree_selection:
-                tree_item = tree_selection[0]
-                if tree_item in self.element_map:
-                    element = self.element_map[tree_item]
-                    
-                    # Remove old attribute if name changed
-                    if new_name != attr_name and attr_name in element.attrib:
-                        del element.attrib[attr_name]
-                    
-                    # Set new attribute
-                    element.attrib[new_name] = new_value
-                    
-                    # Update displays
-                    self.refresh_attribute_display(element)
-                    self.update_tree_item_text(tree_item, element)
-                    self.mark_modified()
-                    
-                    # Refresh source view if visible
-                    current_tab = self.notebook.tab(self.notebook.select(), "text")
-                    if current_tab == "XML Source":
-                        self.refresh_source_view()
-    
-    def add_attribute(self):
-        """Add new attribute to selected element with improved UX"""
-        tree_selection = self.tree.selection()
-        if not tree_selection:
-            self.show_custom_messagebox("No Selection", "Please select an element first.", "warning")
-            return
-        
-        # Create edit dialog for new attribute
-        dialog = AttributeEditDialog(self.root, "", "")
-        
-        # Wait for dialog to complete
-        self.root.wait_window(dialog.dialog)
-        
-        # Check if we have a result
-        if hasattr(dialog, 'result') and dialog.result:
-            attr_name, attr_value = dialog.result
-            
-            # Check if attribute already exists
-            tree_item = tree_selection[0]
-            if tree_item in self.element_map:
-                element = self.element_map[tree_item]
-                
-                if attr_name in element.attrib:
-                    result = messagebox.askyesno("Attribute Exists", 
-                                               f"Attribute '{attr_name}' already exists. Replace it?")
-                    if not result:
-                        return
-                
-                # Add to XML
-                element.attrib[attr_name] = attr_value
-                
-                # Update displays
-                self.refresh_attribute_display(element)
-                self.update_tree_item_text(tree_item, element)
-                self.mark_modified()
-                
-                # Select the new attribute
-                for item_id in self.attr_tree.get_children():
-                    if self.attr_tree.item(item_id, "text") == attr_name:
-                        self.attr_tree.selection_set(item_id)
-                        self.attr_tree.focus(item_id)
-                        break
-                
-                self.status_var.set(f"Added attribute: {attr_name}")
-    
     def refresh_attribute_display(self, element):
         """Refresh the attribute display with enhanced formatting"""
         # Clear and rebuild the attribute tree
@@ -1245,38 +1818,7 @@ Built with Python and tkinter"""
             # Add tooltip for long values
             if len(str(attr_value)) > 50:
                 self.attr_tree.set(item_id, "value", display_value + " [...]")
-    
-    def delete_attribute(self):
-        """Delete selected attribute with enhanced confirmation"""
-        selection = self.attr_tree.selection()
-        if not selection:
-            self.show_custom_messagebox("No Selection", "Please select an attribute to delete.", "warning")
-            return
         
-        item = selection[0]
-        attr_name = self.attr_tree.item(item, "text")
-        
-        # Enhanced confirmation dialog
-        result = messagebox.askyesno("Confirm Delete", 
-                                   f"Are you sure you want to delete attribute '{attr_name}'?\n\n"
-                                   f"This action cannot be undone.")
-        if result:
-            # Remove from XML
-            tree_selection = self.tree.selection()
-            if tree_selection:
-                tree_item = tree_selection[0]
-                if tree_item in self.element_map:
-                    element = self.element_map[tree_item]
-                    if attr_name in element.attrib:
-                        del element.attrib[attr_name]
-                    
-                    # Update displays
-                    self.refresh_attribute_display(element)
-                    self.update_tree_item_text(tree_item, element)
-                    self.mark_modified()
-                    
-                    self.status_var.set(f"Deleted attribute: {attr_name}")
-    
     def mark_modified(self):
         """Mark the document as modified with visual indicators"""
         if not self.is_modified:
@@ -1291,41 +1833,6 @@ Built with Python and tkinter"""
             # Update file info
             if self.current_file:
                 self.file_info_label.config(text=f"📄 {os.path.basename(self.current_file)} (modified)")
-    
-    def save_file(self):
-        """Save the current file with enhanced feedback"""
-        if not self.current_file:
-            self.show_custom_messagebox("No File", "No file is currently open.", "warning")
-            return
-        
-        if not self.tree_data:
-            self.show_custom_messagebox("No Data", "No data to save.", "warning")
-            return
-        
-        try:
-            from config import EDITOR_SETTINGS
-            if os.path.exists(self.current_file) and EDITOR_SETTINGS.get("auto_backup", False):
-                backup_path = self.current_file + ".backup"
-                import shutil
-                shutil.copy2(self.current_file, backup_path)
-                self.status_var.set(f"Backup created: {os.path.basename(backup_path)}")   
-
-            # Write XML file with pretty formatting
-            self.indent_xml(self.tree_data.getroot())
-            self.tree_data.write(self.current_file, encoding="utf-8", xml_declaration=True)
-            
-            # Reset modification status
-            self.is_modified = False
-            self.root.title(self.root.title().rstrip(" *"))
-            self.modified_indicator.config(text="✓", foreground=DarkTheme.ACCENT_GREEN)
-            self.file_info_label.config(text=f"📄 {os.path.basename(self.current_file)}")
-            
-            # Update statistics and source view
-            self.update_statistics()
-            self.refresh_source_view()
-                        
-        except Exception as e:
-            self.show_custom_messagebox("Save Error", f"Failed to save file:\n{str(e)}", "error")
     
     def save_as_binary(self):
         """Save the file in binary format with enhanced user experience"""
@@ -1550,18 +2057,23 @@ Built with Python and tkinter"""
     
     def on_closing(self):
         """Handle application closing with unsaved changes check"""
-        if self.is_modified:
-            result = messagebox.askyesnocancel(
+        if self.is_modified or self.source_modified:
+            if self.source_modified:
+                message = "You have unsaved changes in the XML source. Do you want to save before closing?"
+            else:
+                message = "You have unsaved changes. Do you want to save before closing?"
+            
+            result = self.show_custom_messagebox_with_yesnocancel(
                 "Unsaved Changes",
-                "You have unsaved changes. Do you want to save before closing?",
-                icon='warning'
+                message,
+                "warning"
             )
             
-            if result is True:  # Yes - save and close
+            if result == "yes":  # Yes - save and close
                 self.save_file()
-                if not self.is_modified:  # Only close if save was successful
+                if not self.is_modified and not self.source_modified:  # Only close if save was successful
                     self.root.destroy()
-            elif result is False:  # No - close without saving
+            elif result == "no":  # No - close without saving
                 self.root.destroy()
             # Cancel - do nothing, keep window open
         else:

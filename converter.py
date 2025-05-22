@@ -80,9 +80,17 @@ class GameXMLConverter:
             if self.is_file_xml_format(file_path):
                 return True, "File is already in readable XML format"
             
+            print(f"DEBUG: Converting file: {file_path}")
+            
             # Determine conversion paths
             base, ext = os.path.splitext(file_path)
-            if ext == '.game.xml':
+            print(f"DEBUG: Base: {base}, Extension: {ext}")
+            
+            if ext == '.rml':
+                # For .rml files, create corresponding .xml file
+                xml_path = base + '.xml'
+                rml_path = file_path
+            elif ext == '.game.xml':
                 rml_path = base + '.rml'
                 xml_path = file_path
             elif ext == '.xml':
@@ -92,39 +100,82 @@ class GameXMLConverter:
                 rml_path = file_path + '.rml'
                 xml_path = file_path.replace(ext, '.xml')
             
-            # Backup original file
-            if os.path.exists(rml_path):
-                os.remove(rml_path)
-            shutil.move(file_path, rml_path)
+            print(f"DEBUG: RML path: {rml_path}")
+            print(f"DEBUG: XML path: {xml_path}")
             
-            # Use absolute paths with forward slashes
-            abs_rml_path = os.path.abspath(rml_path).replace("\\", "/")
-            abs_xml_path = os.path.abspath(xml_path).replace("\\", "/")
+            # For .rml files, we don't need to backup/move - just convert directly
+            if ext == '.rml':
+                # Use absolute paths with forward slashes
+                abs_rml_path = os.path.abspath(rml_path).replace("\\", "/")
+                abs_xml_path = os.path.abspath(xml_path).replace("\\", "/")
+                
+                print(f"DEBUG: Converting RML to XML")
+                print(f"DEBUG: Command: {self.xml_converter_path} --xml {abs_rml_path} {abs_xml_path}")
+                
+                # Run conversion
+                process = subprocess.run(
+                    [self.xml_converter_path, "--xml", abs_rml_path, abs_xml_path],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=30
+                )
+                
+                print(f"DEBUG: Return code: {process.returncode}")
+                print(f"DEBUG: Stdout: {process.stdout}")
+                print(f"DEBUG: Stderr: {process.stderr}")
+                
+                # Check conversion result
+                if process.returncode != 0:
+                    return False, f"Conversion failed: {process.stderr}"
+                
+                # Check if output file was created
+                if not os.path.exists(xml_path):
+                    return False, f"Conversion appeared to succeed but output file not found: {xml_path}"
+                
+                return True, f"Successfully converted RML to readable XML: {abs_xml_path}"
             
-            # Run conversion
-            process = subprocess.run(
-                [self.xml_converter_path, "--xml", abs_rml_path, abs_xml_path],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=10
-            )
-            
-            # Check conversion result
-            if process.returncode != 0:
-                # Restore original file on failure
-                shutil.move(rml_path, file_path)
-                return False, f"Conversion failed: {process.stderr}"
-            
-            # Clean up intermediate file
-            if os.path.exists(rml_path):
-                os.remove(rml_path)
-            
-            return True, f"Successfully converted to readable XML format: {abs_xml_path}"
-            
+            else:
+                # Original logic for .game.xml files
+                # Backup original file
+                if os.path.exists(rml_path):
+                    os.remove(rml_path)
+                shutil.move(file_path, rml_path)
+                
+                # Use absolute paths with forward slashes
+                abs_rml_path = os.path.abspath(rml_path).replace("\\", "/")
+                abs_xml_path = os.path.abspath(xml_path).replace("\\", "/")
+                
+                # Run conversion
+                process = subprocess.run(
+                    [self.xml_converter_path, "--xml", abs_rml_path, abs_xml_path],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=30
+                )
+                
+                # Check conversion result
+                if process.returncode != 0:
+                    # Restore original file on failure
+                    shutil.move(rml_path, file_path)
+                    return False, f"Conversion failed: {process.stderr}"
+                
+                # Clean up intermediate file
+                if os.path.exists(rml_path):
+                    os.remove(rml_path)
+                
+                return True, f"Successfully converted to readable XML format: {abs_xml_path}"
+                
+        except subprocess.TimeoutExpired:
+            return False, "Conversion timed out - file may be too large or corrupted"
+        except FileNotFoundError as e:
+            return False, f"File not found: {str(e)}"
+        except PermissionError as e:
+            return False, f"Permission denied: {str(e)}"
         except Exception as e:
             return False, f"Error during conversion: {str(e)}"
-    
+        
     def save_as_binary(self, file_path):
         """Convert readable XML back to binary format"""
         if not self.can_convert:
