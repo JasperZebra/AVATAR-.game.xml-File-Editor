@@ -67,7 +67,7 @@ class GameXMLEditor:
     
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.0")
+        self.root.title("AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.1")
         self.root.geometry("1800x1100")
         
         # Apply dark theme
@@ -1232,7 +1232,7 @@ class GameXMLEditor:
             self.file_info_label.config(text=f"📄 {os.path.basename(filename)}")
             
             # Update window title
-            self.root.title(f"AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.0 | Current XML File Loaded: - {os.path.basename(filename)}")
+            self.root.title(f"AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.1 | Current XML File Loaded: - {os.path.basename(filename)}")
             self.status_var.set(f"Loaded: {filename}")
             
             # Update statistics
