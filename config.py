@@ -25,7 +25,21 @@ EXCLUDED_FILES = [
 ]
 
 # Conversion tool filenames
-CONVERTER_EXECUTABLE = "Gibbed.Dunia.ConvertXml.exe"
+CONVERTER_EXECUTABLE = [
+    {
+        "name": "Gibbed Far Cry 2 Converter", 
+        "exe": "Gibbed.FarCry2.ConvertXMLResource.exe",
+        "syntax": "simple",  # input.rml output.xml
+        "games": ["Avatar", "Far Cry 2"]
+    },
+    {
+        "name": "Gibbed Dunia Converter",
+        "exe": "Gibbed.Dunia.ConvertXml.exe", 
+        "syntax": "flags",   # --xml input.rml output.xml
+        "games": ["Far Cry 3+", "Other Dunia games"]
+    }
+]
+
 REQUIRED_DLLS = [
     "Gibbed.Dunia.FileFormats.dll",
     "NDesk.Options.dll", 

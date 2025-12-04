@@ -73,7 +73,8 @@ class GameXMLEditor:
         # Apply dark theme
         self.setup_dark_theme()
         
-        # Initialize converter
+        # Initialize converter with enhanced feedback
+        print("Initializing Game XML Converter...")
         self.converter = GameXMLConverter()
         
         # Current file
@@ -95,11 +96,208 @@ class GameXMLEditor:
         # Check converter status and show welcome
         self.show_welcome_message()
         
+        # Enhanced converter status reporting
         if not self.converter.can_convert:
-            self.status_var.set("WARNING: File conversion disabled - missing tools/dependencies")
+            # Detailed error reporting
+            converter_info = self.converter.get_converter_info()
+            
+            if not converter_info["available_converters"]:
+                missing_tools = [conv["exe"] for conv in self.converter.converter_definitions]
+                status_msg = f"WARNING: No conversion tools found - Missing: {', '.join(missing_tools[:2])}"
+                if len(missing_tools) > 2:
+                    status_msg += f" and {len(missing_tools)-2} more"
+            elif converter_info["missing_dlls"]:
+                status_msg = f"WARNING: Missing DLLs - {', '.join(converter_info['missing_dlls'][:2])}"
+                if len(converter_info["missing_dlls"]) > 2:
+                    status_msg += f" and {len(converter_info['missing_dlls'])-2} more"
+            else:
+                status_msg = "WARNING: File conversion disabled - unknown issue"
+            
+            self.status_var.set(status_msg)
+            
+            # Show detailed setup instructions
+            self.show_converter_setup_dialog()
         else:
-            self.status_var.set("Ready - AVATAR XML File Editor")
-    
+            # Success - show available tools
+            tool_info = self.converter.get_available_tools_info()
+            avatar_ready = any("Avatar" in conv.get("games", []) for conv in self.converter.available_converters)
+            
+            if avatar_ready:
+                self.status_var.set(f"🎮 AVATAR Ready - {tool_info}")
+            else:
+                self.status_var.set(f"Ready - {tool_info}")
+            
+            # Test conversion capability
+            test_success, test_info = self.converter.test_conversion_capability()
+            if test_success:
+                print(f"Conversion test: {test_info}")
+
+    def show_converter_setup_dialog(self):
+        """Show setup instructions for missing conversion tools"""
+        setup_window = tk.Toplevel(self.root)
+        setup_window.title("Conversion Tools Setup Required")
+        setup_window.geometry("700x600")
+        setup_window.configure(bg=DarkTheme.BG_DARK)
+        setup_window.resizable(True, True)
+        setup_window.transient(self.root)
+        setup_window.grab_set()
+        
+        # Center the window
+        setup_window.geometry("+%d+%d" % (
+            self.root.winfo_rootx() + 300,
+            self.root.winfo_rooty() + 200
+        ))
+        
+        # Main frame
+        main_frame = ttk.Frame(setup_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Title with icon
+        title_frame = ttk.Frame(main_frame)
+        title_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        title_label = ttk.Label(title_frame, 
+                            text="⚙️ Setup Conversion Tools",
+                            font=('Segoe UI', 16, 'bold'),
+                            foreground=DarkTheme.ACCENT_ORANGE)
+        title_label.pack()
+        
+        # Get converter info for detailed reporting
+        converter_info = self.converter.get_converter_info()
+        
+        # Status section
+        status_frame = ttk.LabelFrame(main_frame, text="Current Status", padding=15)
+        status_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        if not converter_info["available_converters"]:
+            status_text = "❌ No conversion tools found"
+            status_color = DarkTheme.ACCENT_RED
+        elif converter_info["missing_dlls"]:
+            status_text = f"⚠️ Tools found but missing {len(converter_info['missing_dlls'])} required DLLs"
+            status_color = DarkTheme.ACCENT_ORANGE
+        else:
+            status_text = "❓ Unknown configuration issue"
+            status_color = DarkTheme.ACCENT_YELLOW
+        
+        status_label = ttk.Label(status_frame, text=status_text, 
+                                font=('Segoe UI', 11, 'bold'),
+                                foreground=status_color)
+        status_label.pack(anchor=tk.W)
+        
+        # Tools path info
+        path_label = ttk.Label(status_frame, 
+                            text=f"Looking for tools in: {os.path.abspath(converter_info['tools_path'])}",
+                            font=('Consolas', 9))
+        path_label.pack(anchor=tk.W, pady=(5, 0))
+        
+        # Required files section
+        required_frame = ttk.LabelFrame(main_frame, text="Required Files", padding=15)
+        required_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        
+        # Create scrollable text for file list
+        text_frame = ttk.Frame(required_frame)
+        text_frame.pack(fill=tk.BOTH, expand=True)
+        
+        files_text = tk.Text(text_frame, height=12, wrap=tk.WORD,
+                            font=('Consolas', 9),
+                            bg=DarkTheme.BG_LIGHT, 
+                            fg=DarkTheme.FG_NORMAL,
+                            borderwidth=1,
+                            relief='solid')
+        
+        files_scrolly = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=files_text.yview)
+        files_text.configure(yscrollcommand=files_scrolly.set)
+        
+        files_text.grid(row=0, column=0, sticky="nsew")
+        files_scrolly.grid(row=0, column=1, sticky="ns")
+        text_frame.grid_rowconfigure(0, weight=1)
+        text_frame.grid_columnconfigure(0, weight=1)
+        
+        # Build file list content
+        files_content = "📋 Place these files in the tools/ folder:\n\n"
+        
+        files_content += "🔧 CONVERTER EXECUTABLES (need at least one):\n"
+        for conv_def in self.converter.converter_definitions:
+            found = any(conv["exe"] == conv_def["exe"] for conv in converter_info["available_converters"])
+            status_icon = "✅" if found else "❌"
+            games_list = ", ".join(conv_def["games"][:2])
+            if len(conv_def["games"]) > 2:
+                games_list += f" + {len(conv_def['games'])-2} more"
+            
+            files_content += f"  {status_icon} {conv_def['exe']}\n"
+            files_content += f"      (For: {games_list})\n"
+        
+        files_content += "\n📚 REQUIRED DLL FILES:\n"
+        required_dlls = [
+            "Gibbed.Dunia.FileFormats.dll",
+            "NDesk.Options.dll", 
+            "Gibbed.IO.dll",
+            "Gibbed.ProjectData.dll"
+        ]
+        
+        for dll in required_dlls:
+            found = dll not in converter_info["missing_dlls"]
+            status_icon = "✅" if found else "❌"
+            files_content += f"  {status_icon} {dll}\n"
+        
+        files_content += "\n💡 SETUP INSTRUCTIONS:\n"
+        files_content += "1. Create a 'tools' folder in your editor directory\n"
+        files_content += "2. Download Gibbed's Far Cry 2 / Dunia tools\n"
+        files_content += "3. Extract the files listed above into the tools folder\n"
+        files_content += "4. Restart the editor\n\n"
+        
+        files_content += "🎮 FOR AVATAR FILES:\n"
+        files_content += "• Gibbed.FarCry2.ConvertXMLResource.exe (recommended)\n"
+        files_content += "• This tool specifically supports Avatar: The Game RML files\n\n"
+        
+        files_content += "🌟 DOWNLOAD LOCATIONS:\n"
+        files_content += "• Search for 'Gibbed Far Cry 2 tools'\n"
+        files_content += "• Check Rick's Game Stuff blog\n"
+        files_content += "• Look for Far Cry modding communities\n"
+        
+        files_text.insert(1.0, files_content)
+        files_text.config(state=tk.DISABLED)
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(15, 0))
+        
+        # Refresh button
+        def refresh_status():
+            setup_window.destroy()
+            # Re-initialize converter
+            self.converter = GameXMLConverter()
+            if self.converter.can_convert:
+                tool_info = self.converter.get_available_tools_info()
+                self.status_var.set(f"🎮 Ready - {tool_info}")
+                self.show_custom_messagebox("Setup Complete", "Conversion tools detected successfully!", "info")
+            else:
+                self.show_converter_setup_dialog()
+        
+        ttk.Button(button_frame, text="🔄 Check Again", 
+                command=refresh_status, width=15).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Open tools folder button (Windows only)
+        def open_tools_folder():
+            tools_path = os.path.abspath(converter_info['tools_path'])
+            if not os.path.exists(tools_path):
+                os.makedirs(tools_path)
+            
+            try:
+                os.startfile(tools_path)
+            except Exception as e:
+                self.show_custom_messagebox("Error", f"Could not open folder: {str(e)}", "error")
+        
+        ttk.Button(button_frame, text="📁 Open Tools Folder", 
+                command=open_tools_folder, width=20).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Continue anyway button
+        ttk.Button(button_frame, text="Continue Without Conversion", 
+                command=setup_window.destroy, width=25).pack(side=tk.RIGHT)
+        
+        # Focus and wait
+        setup_window.focus_set()
+
     def setup_dark_theme(self):
         """Configure dark theme for the application"""
         self.root.configure(bg=DarkTheme.BG_DARK)
