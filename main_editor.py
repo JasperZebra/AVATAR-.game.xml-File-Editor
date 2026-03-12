@@ -21,12 +21,11 @@ try:
     from dialogs import AttributeEditDialog, FindDialog
 except ImportError:
     print("Warning: dialogs module not found. Some features may be limited.")
-    # Fallback implementations would go here
 
 
 class DarkTheme:
     """Dark theme configuration for the XML Editor"""
-    
+
     # Main colors
     BG_DARK = "#2b2b2b"
     BG_DARKER = "#1e1e1e"
@@ -34,7 +33,7 @@ class DarkTheme:
     FG_LIGHT = "#ffffff"
     FG_NORMAL = "#cccccc"
     FG_DIM = "#888888"
-    
+
     # Accent colors
     ACCENT_BLUE = "#007acc"
     ACCENT_GREEN = "#4ec9b0"
@@ -42,7 +41,7 @@ class DarkTheme:
     ACCENT_RED = "#f44747"
     ACCENT_PURPLE = "#c586c0"
     ACCENT_YELLOW = "#dcdcaa"
-    
+
     # UI specific colors
     SELECTION_BG = "#264f78"
     SELECTION_FG = "#ffffff"
@@ -53,7 +52,7 @@ class DarkTheme:
     ENTRY_FG = "#ffffff"
     MENU_BG = "#2b2b2b"
     MENU_FG = "#cccccc"
-    
+
     # Syntax highlighting colors
     XML_TAG = "#569cd6"
     XML_ATTR = "#9cdcfe"
@@ -62,45 +61,181 @@ class DarkTheme:
     XML_TEXT = "#d4d4d4"
 
 
+class CloseableNotebook(ttk.Notebook):
+    """A ttk.Notebook subclass with × close buttons on each tab."""
+
+    __initialized = False
+    _images = ()
+
+    def __init__(self, *args, **kwargs):
+        if not CloseableNotebook.__initialized:
+            self._initialize_custom_style()
+            CloseableNotebook.__initialized = True
+        kwargs.setdefault("style", "CloseableNotebook")
+        super().__init__(*args, **kwargs)
+        self._active = None
+        self._closed_tab = None
+        self.bind("<ButtonPress-1>", self._on_btn_press, True)
+        self.bind("<ButtonRelease-1>", self._on_btn_release)
+
+    def _initialize_custom_style(self):
+        style = ttk.Style()
+        # Build close-button images programmatically (avoids tiny GIF issues)
+        CloseableNotebook._images = (
+            CloseableNotebook._draw_close_image(
+                "img_nb_close", "#aaaaaa", "#484848"),         # dim × on subtle box
+            CloseableNotebook._draw_close_image(
+                "img_nb_close_active", "#ffffff", "#606060"),  # white × on lighter box
+            CloseableNotebook._draw_close_image(
+                "img_nb_close_pressed", "#ffffff", "#993333"), # white × on red box
+        )
+
+        style.element_create("close", "image", "img_nb_close",
+                             ("active", "pressed", "!disabled", "img_nb_close_pressed"),
+                             ("active", "!disabled", "img_nb_close_active"),
+                             border=4, sticky='')
+
+        style.layout("CloseableNotebook", [
+            ("CloseableNotebook.client", {"sticky": "nswe"})
+        ])
+        style.layout("CloseableNotebook.Tab", [
+            ("CloseableNotebook.tab", {
+                "sticky": "nswe",
+                "children": [
+                    ("CloseableNotebook.padding", {
+                        "side": "top",
+                        "sticky": "nswe",
+                        "children": [
+                            ("CloseableNotebook.focus", {
+                                "side": "top",
+                                "sticky": "nswe",
+                                "children": [
+                                    ("CloseableNotebook.label", {"side": "left", "sticky": 'w'}),
+                                    ("close", {"side": "left", "sticky": ''}),
+                                ]
+                            })
+                        ]
+                    })
+                ]
+            })
+        ])
+
+        style.configure("CloseableNotebook",
+                        background=DarkTheme.BG_DARK,
+                        borderwidth=1,
+                        tabposition='nw')
+        style.configure("CloseableNotebook.Tab",
+                        background=DarkTheme.BG_LIGHT,
+                        foreground=DarkTheme.FG_NORMAL,
+                        padding=[8, 6],   # tight left padding so text sits left
+                        anchor='w',       # left-align the label text
+                        font=('Segoe UI', 9))
+        style.map("CloseableNotebook.Tab",
+                  background=[('selected', DarkTheme.BG_DARK),
+                              ('active', DarkTheme.BUTTON_HOVER)],
+                  foreground=[('selected', DarkTheme.ACCENT_BLUE)])
+
+    @staticmethod
+    def _draw_close_image(name, x_color, box_color, box_size=16, gap=10):
+        """Draw a close-button PhotoImage.
+
+        The image is (gap + box_size) pixels wide:
+          - left `gap` columns are filled with DarkTheme.BG_DARK so they are
+            invisible against the selected-tab background, creating space
+            between the filename label and the × box.
+          - the remaining `box_size` columns contain the coloured × button.
+        """
+        total_w = gap + box_size
+        img = tk.PhotoImage(name=name, width=total_w, height=box_size)
+
+        # Left gap strip — use the selected-tab background so it is invisible
+        gap_row = '{' + ' '.join([DarkTheme.BG_DARK] * gap) + '}'
+        for y in range(box_size):
+            img.put(gap_row, (0, y))
+
+        # Right box strip — coloured button background
+        box_row = '{' + ' '.join([box_color] * box_size) + '}'
+        for y in range(box_size):
+            img.put(box_row, (gap, y))
+
+        # Draw × diagonals inside the box (margin 3 px from box edges)
+        m = 3
+        for i in range(m, box_size - m):
+            img.put(x_color, to=(gap + i, i))                    # main  (\)
+            img.put(x_color, to=(gap + i, box_size - 1 - i))     # anti  (/)
+        # Thicken each diagonal by one extra pixel
+        for i in range(m, box_size - m - 1):
+            img.put(x_color, to=(gap + i + 1, i))                # main  thicken
+            img.put(x_color, to=(gap + i + 1, box_size - 1 - i)) # anti  thicken
+        return img
+
+    def _on_btn_press(self, event):
+        x, y = event.x, event.y
+        elem = self.identify(x, y)
+        if "close" in elem:
+            try:
+                index = self.index("@%d,%d" % (x, y))
+                self._active = index
+            except tk.TclError:
+                pass
+
+    def _on_btn_release(self, event):
+        x, y = event.x, event.y
+        if self._active is not None:
+            try:
+                index = self.index("@%d,%d" % (x, y))
+            except tk.TclError:
+                self._active = None
+                return
+
+            elem = self.identify(x, y)
+            if "close" in elem and self._active == index:
+                tabs = self.tabs()
+                if index < len(tabs):
+                    self._closed_tab = tabs[index]
+                    self.event_generate("<<NotebookTabClose>>")
+        self._active = None
+
+
 class GameXMLEditor:
     """Modern GUI Editor for .game.xml files with dark theme"""
-    
+
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.1")
+        self.root.title("AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.2")
         self.root.geometry("1800x1100")
-        
+
         # Apply dark theme
         self.setup_dark_theme()
-        
+
         # Initialize converter with enhanced feedback
         print("Initializing Game XML Converter...")
         self.converter = GameXMLConverter()
-        
-        # Current file
-        self.current_file = None
-        self.tree_data = None
-        self.is_modified = False
-        self.element_map = {}
-        
-        # NEW: Track source modifications separately
-        self.source_modified = False
-        self.updating_source = False  # Flag to prevent recursive updates
-        
+
+        # Per-tab file management (replaces single-file variables)
+        self.open_files = {}
+
         # Create GUI
         self.create_menu()
         self.create_toolbar()
         self.create_main_frame()
         self.create_status_bar()
-        
+
+        # Bind notebook events (after create_main_frame creates self.notebook)
+        self.notebook.bind("<<NotebookTabClose>>", self.close_tab)
+        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
+
+        # Bind Ctrl+W to close active tab
+        self.root.bind('<Control-w>', lambda e: self.close_active_tab())
+
         # Check converter status and show welcome
         self.show_welcome_message()
-        
+
         # Enhanced converter status reporting
         if not self.converter.can_convert:
             # Detailed error reporting
             converter_info = self.converter.get_converter_info()
-            
+
             if not converter_info["available_converters"]:
                 missing_tools = [conv["exe"] for conv in self.converter.converter_definitions]
                 status_msg = f"WARNING: No conversion tools found - Missing: {', '.join(missing_tools[:2])}"
@@ -112,21 +247,21 @@ class GameXMLEditor:
                     status_msg += f" and {len(converter_info['missing_dlls'])-2} more"
             else:
                 status_msg = "WARNING: File conversion disabled - unknown issue"
-            
+
             self.status_var.set(status_msg)
-            
+
             # Show detailed setup instructions
             self.show_converter_setup_dialog()
         else:
             # Success - show available tools
             tool_info = self.converter.get_available_tools_info()
             avatar_ready = any("Avatar" in conv.get("games", []) for conv in self.converter.available_converters)
-            
+
             if avatar_ready:
                 self.status_var.set(f"🎮 AVATAR Ready - {tool_info}")
             else:
                 self.status_var.set(f"Ready - {tool_info}")
-            
+
             # Test conversion capability
             test_success, test_info = self.converter.test_conversion_capability()
             if test_success:
@@ -141,34 +276,34 @@ class GameXMLEditor:
         setup_window.resizable(True, True)
         setup_window.transient(self.root)
         setup_window.grab_set()
-        
+
         # Center the window
         setup_window.geometry("+%d+%d" % (
             self.root.winfo_rootx() + 300,
             self.root.winfo_rooty() + 200
         ))
-        
+
         # Main frame
         main_frame = ttk.Frame(setup_window)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
+
         # Title with icon
         title_frame = ttk.Frame(main_frame)
         title_frame.pack(fill=tk.X, pady=(0, 15))
-        
-        title_label = ttk.Label(title_frame, 
+
+        title_label = ttk.Label(title_frame,
                             text="⚙️ Setup Conversion Tools",
                             font=('Segoe UI', 16, 'bold'),
                             foreground=DarkTheme.ACCENT_ORANGE)
         title_label.pack()
-        
+
         # Get converter info for detailed reporting
         converter_info = self.converter.get_converter_info()
-        
+
         # Status section
         status_frame = ttk.LabelFrame(main_frame, text="Current Status", padding=15)
         status_frame.pack(fill=tk.X, pady=(0, 15))
-        
+
         if not converter_info["available_converters"]:
             status_text = "❌ No conversion tools found"
             status_color = DarkTheme.ACCENT_RED
@@ -178,44 +313,44 @@ class GameXMLEditor:
         else:
             status_text = "❓ Unknown configuration issue"
             status_color = DarkTheme.ACCENT_YELLOW
-        
-        status_label = ttk.Label(status_frame, text=status_text, 
+
+        status_label = ttk.Label(status_frame, text=status_text,
                                 font=('Segoe UI', 11, 'bold'),
                                 foreground=status_color)
         status_label.pack(anchor=tk.W)
-        
+
         # Tools path info
-        path_label = ttk.Label(status_frame, 
+        path_label = ttk.Label(status_frame,
                             text=f"Looking for tools in: {os.path.abspath(converter_info['tools_path'])}",
                             font=('Consolas', 9))
         path_label.pack(anchor=tk.W, pady=(5, 0))
-        
+
         # Required files section
         required_frame = ttk.LabelFrame(main_frame, text="Required Files", padding=15)
         required_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
-        
+
         # Create scrollable text for file list
         text_frame = ttk.Frame(required_frame)
         text_frame.pack(fill=tk.BOTH, expand=True)
-        
+
         files_text = tk.Text(text_frame, height=12, wrap=tk.WORD,
                             font=('Consolas', 9),
-                            bg=DarkTheme.BG_LIGHT, 
+                            bg=DarkTheme.BG_LIGHT,
                             fg=DarkTheme.FG_NORMAL,
                             borderwidth=1,
                             relief='solid')
-        
+
         files_scrolly = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=files_text.yview)
         files_text.configure(yscrollcommand=files_scrolly.set)
-        
+
         files_text.grid(row=0, column=0, sticky="nsew")
         files_scrolly.grid(row=0, column=1, sticky="ns")
         text_frame.grid_rowconfigure(0, weight=1)
         text_frame.grid_columnconfigure(0, weight=1)
-        
+
         # Build file list content
         files_content = "📋 Place these files in the tools/ folder:\n\n"
-        
+
         files_content += "🔧 CONVERTER EXECUTABLES (need at least one):\n"
         for conv_def in self.converter.converter_definitions:
             found = any(conv["exe"] == conv_def["exe"] for conv in converter_info["available_converters"])
@@ -223,45 +358,45 @@ class GameXMLEditor:
             games_list = ", ".join(conv_def["games"][:2])
             if len(conv_def["games"]) > 2:
                 games_list += f" + {len(conv_def['games'])-2} more"
-            
+
             files_content += f"  {status_icon} {conv_def['exe']}\n"
             files_content += f"      (For: {games_list})\n"
-        
+
         files_content += "\n📚 REQUIRED DLL FILES:\n"
         required_dlls = [
             "Gibbed.Dunia.FileFormats.dll",
-            "NDesk.Options.dll", 
+            "NDesk.Options.dll",
             "Gibbed.IO.dll",
             "Gibbed.ProjectData.dll"
         ]
-        
+
         for dll in required_dlls:
             found = dll not in converter_info["missing_dlls"]
             status_icon = "✅" if found else "❌"
             files_content += f"  {status_icon} {dll}\n"
-        
+
         files_content += "\n💡 SETUP INSTRUCTIONS:\n"
         files_content += "1. Create a 'tools' folder in your editor directory\n"
         files_content += "2. Download Gibbed's Far Cry 2 / Dunia tools\n"
         files_content += "3. Extract the files listed above into the tools folder\n"
         files_content += "4. Restart the editor\n\n"
-        
+
         files_content += "🎮 FOR AVATAR FILES:\n"
         files_content += "• Gibbed.FarCry2.ConvertXMLResource.exe (recommended)\n"
         files_content += "• This tool specifically supports Avatar: The Game RML files\n\n"
-        
+
         files_content += "🌟 DOWNLOAD LOCATIONS:\n"
         files_content += "• Search for 'Gibbed Far Cry 2 tools'\n"
         files_content += "• Check Rick's Game Stuff blog\n"
         files_content += "• Look for Far Cry modding communities\n"
-        
+
         files_text.insert(1.0, files_content)
         files_text.config(state=tk.DISABLED)
-        
+
         # Buttons
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X, pady=(15, 0))
-        
+
         # Refresh button
         def refresh_status():
             setup_window.destroy()
@@ -273,50 +408,50 @@ class GameXMLEditor:
                 self.show_custom_messagebox("Setup Complete", "Conversion tools detected successfully!", "info")
             else:
                 self.show_converter_setup_dialog()
-        
-        ttk.Button(button_frame, text="🔄 Check Again", 
+
+        ttk.Button(button_frame, text="🔄 Check Again",
                 command=refresh_status, width=15).pack(side=tk.LEFT, padx=(0, 10))
-        
+
         # Open tools folder button (Windows only)
         def open_tools_folder():
             tools_path = os.path.abspath(converter_info['tools_path'])
             if not os.path.exists(tools_path):
                 os.makedirs(tools_path)
-            
+
             try:
                 os.startfile(tools_path)
             except Exception as e:
                 self.show_custom_messagebox("Error", f"Could not open folder: {str(e)}", "error")
-        
-        ttk.Button(button_frame, text="📁 Open Tools Folder", 
+
+        ttk.Button(button_frame, text="📁 Open Tools Folder",
                 command=open_tools_folder, width=20).pack(side=tk.LEFT, padx=(0, 10))
-        
+
         # Continue anyway button
-        ttk.Button(button_frame, text="Continue Without Conversion", 
+        ttk.Button(button_frame, text="Continue Without Conversion",
                 command=setup_window.destroy, width=25).pack(side=tk.RIGHT)
-        
+
         # Focus and wait
         setup_window.focus_set()
 
     def setup_dark_theme(self):
         """Configure dark theme for the application"""
         self.root.configure(bg=DarkTheme.BG_DARK)
-        
+
         # Configure ttk style
         style = ttk.Style()
         style.theme_use('clam')
-        
+
         # Configure Frame styles
-        style.configure('TFrame', 
+        style.configure('TFrame',
                        background=DarkTheme.BG_DARK,
                        borderwidth=0)
-        
+
         # Configure Label styles
-        style.configure('TLabel', 
-                       background=DarkTheme.BG_DARK, 
+        style.configure('TLabel',
+                       background=DarkTheme.BG_DARK,
                        foreground=DarkTheme.FG_NORMAL,
                        font=('Segoe UI', 9))
-        
+
         # Configure LabelFrame styles
         style.configure('TLabelframe',
                        background=DarkTheme.BG_DARK,
@@ -327,7 +462,7 @@ class GameXMLEditor:
                        background=DarkTheme.BG_DARK,
                        foreground=DarkTheme.ACCENT_BLUE,
                        font=('Segoe UI', 9, 'bold'))
-        
+
         # Configure Button styles
         style.configure('TButton',
                        background=DarkTheme.BUTTON_BG,
@@ -340,7 +475,7 @@ class GameXMLEditor:
                  background=[('active', DarkTheme.BUTTON_HOVER),
                            ('pressed', DarkTheme.SELECTION_BG)],
                  foreground=[('active', DarkTheme.FG_LIGHT)])
-        
+
         # Configure Entry styles
         style.configure('TEntry',
                        background=DarkTheme.ENTRY_BG,
@@ -352,7 +487,7 @@ class GameXMLEditor:
         style.map('TEntry',
                  focuscolor=[('!focus', DarkTheme.BORDER_COLOR)],
                  bordercolor=[('focus', DarkTheme.ACCENT_BLUE)])
-        
+
         # Configure Treeview styles
         style.configure('Treeview',
                        background=DarkTheme.BG_LIGHT,
@@ -372,7 +507,7 @@ class GameXMLEditor:
                  foreground=[('selected', DarkTheme.SELECTION_FG)])
         style.map('Treeview.Heading',
                  background=[('active', DarkTheme.BUTTON_HOVER)])
-        
+
         # Configure Notebook styles
         style.configure('TNotebook',
                        background=DarkTheme.BG_DARK,
@@ -387,13 +522,13 @@ class GameXMLEditor:
                  background=[('selected', DarkTheme.BG_DARK),
                            ('active', DarkTheme.BUTTON_HOVER)],
                  foreground=[('selected', DarkTheme.ACCENT_BLUE)])
-        
+
         # Configure PanedWindow styles
         style.configure('TPanedwindow',
                        background=DarkTheme.BG_DARK,
                        borderwidth=1,
                        relief='solid')
-        
+
         # Configure Scrollbar styles
         style.configure('Vertical.TScrollbar',
                        background=DarkTheme.BG_LIGHT,
@@ -409,7 +544,7 @@ class GameXMLEditor:
                        arrowcolor=DarkTheme.FG_NORMAL,
                        darkcolor=DarkTheme.BG_LIGHT,
                        lightcolor=DarkTheme.BG_LIGHT)
-        
+
         # Configure readonly Entry style for tags
         style.configure('Readonly.TEntry',
                        background=DarkTheme.BG_DARKER,
@@ -417,7 +552,7 @@ class GameXMLEditor:
                        borderwidth=1,
                        relief='solid',
                        fieldbackground=DarkTheme.BG_DARKER)
-    
+
     def show_welcome_message(self):
         """Show welcome dialog similar to simplified map editor"""
         # Create a custom dark-themed message box
@@ -428,24 +563,24 @@ class GameXMLEditor:
         welcome_window.resizable(False, False)
         welcome_window.transient(self.root)
         welcome_window.grab_set()
-        
+
         # Center the window
         welcome_window.geometry("+%d+%d" % (
             self.root.winfo_rootx() + 450,
             self.root.winfo_rooty() + 275
         ))
-        
+
         # Main frame
         main_frame = ttk.Frame(welcome_window)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
+
         # Title
-        title_label = ttk.Label(main_frame, 
+        title_label = ttk.Label(main_frame,
                                text="🎮 AVATAR XML File Editor",
                                font=('Segoe UI', 16, 'bold'),
                                foreground=DarkTheme.ACCENT_BLUE)
         title_label.pack(pady=(0, 20))
-        
+
         # Description
         desc_text = """A powerful XML editor designed for AVATAR game files.
 
@@ -453,7 +588,7 @@ class GameXMLEditor:
         - Open and edit .game.xml, .xml, and .rml files
         - Convert binary game files to readable XML format
         - Live XML source editing with syntax highlighting
-        - Tree-based navigation and element management
+        - Multi-file tab interface (VS Code-style)
         - Real-time XML validation and error checking
         - Search functionality with Ctrl+F support
         - Modern dark theme for comfortable editing
@@ -462,553 +597,421 @@ class GameXMLEditor:
         Perfect for modding and analyzing AVATAR game data files.
 
         Built with Python and tkinter for reliable performance."""
-        
-        desc_label = ttk.Label(main_frame, 
+
+        desc_label = ttk.Label(main_frame,
                               text=desc_text,
                               font=('Segoe UI', 10),
                               justify=tk.LEFT)
         desc_label.pack(pady=(0, 20))
-        
+
         # OK button
-        ok_button = ttk.Button(main_frame, 
+        ok_button = ttk.Button(main_frame,
                               text="Get Started",
                               command=welcome_window.destroy,
                               width=15)
         ok_button.pack(pady=10)
-        
+
         # Focus and wait
         ok_button.focus_set()
         welcome_window.wait_window()
-    
+
     def create_menu(self):
         """Create the menu bar with dark theme styling"""
-        menubar = tk.Menu(self.root, 
-                         bg=DarkTheme.MENU_BG, 
+        menubar = tk.Menu(self.root,
+                         bg=DarkTheme.MENU_BG,
                          fg=DarkTheme.MENU_FG,
                          activebackground=DarkTheme.SELECTION_BG,
                          activeforeground=DarkTheme.SELECTION_FG,
                          font=('Segoe UI', 9))
         self.root.config(menu=menubar)
-        
+
         # File menu
-        file_menu = tk.Menu(menubar, tearoff=0, 
-                           bg=DarkTheme.MENU_BG, 
+        file_menu = tk.Menu(menubar, tearoff=0,
+                           bg=DarkTheme.MENU_BG,
                            fg=DarkTheme.MENU_FG,
-                           selectcolor=DarkTheme.ACCENT_BLUE, 
+                           selectcolor=DarkTheme.ACCENT_BLUE,
                            activebackground=DarkTheme.SELECTION_BG,
                            activeforeground=DarkTheme.SELECTION_FG,
                            font=('Segoe UI', 9))
         menubar.add_cascade(label="File", menu=file_menu)
-        file_menu.add_command(label="Select XML File", command=self.open_file, 
+        file_menu.add_command(label="Select XML File", command=self.open_file,
                              accelerator="Ctrl+O")
         file_menu.add_separator()
-        file_menu.add_command(label="Save", command=self.save_file, 
+        file_menu.add_command(label="Save", command=self.save_file,
                              accelerator="Ctrl+S")
         file_menu.add_command(label="Save As Binary...", command=self.save_as_binary)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.quit)
-        
-        # Edit menu
-        edit_menu = tk.Menu(menubar, tearoff=0, 
-                           bg=DarkTheme.MENU_BG, 
+
+        # Edit menu — only Close Tab remains
+        edit_menu = tk.Menu(menubar, tearoff=0,
+                           bg=DarkTheme.MENU_BG,
                            fg=DarkTheme.MENU_FG,
-                           selectcolor=DarkTheme.ACCENT_BLUE, 
+                           selectcolor=DarkTheme.ACCENT_BLUE,
                            activebackground=DarkTheme.SELECTION_BG,
                            activeforeground=DarkTheme.SELECTION_FG,
                            font=('Segoe UI', 9))
         menubar.add_cascade(label="Edit", menu=edit_menu)
-        edit_menu.add_command(label="Expand All", command=self.expand_all)
-        edit_menu.add_command(label="Collapse All", command=self.collapse_all)
-        edit_menu.add_separator()
-        edit_menu.add_command(label="Find...", command=self.show_find_dialog, 
-                             accelerator="Ctrl+F")
-        
+        edit_menu.add_command(label="Close Tab", command=self.close_active_tab,
+                             accelerator="Ctrl+W")
+
         # Tools menu
-        tools_menu = tk.Menu(menubar, tearoff=0, 
-                            bg=DarkTheme.MENU_BG, 
+        tools_menu = tk.Menu(menubar, tearoff=0,
+                            bg=DarkTheme.MENU_BG,
                             fg=DarkTheme.MENU_FG,
-                            selectcolor=DarkTheme.ACCENT_BLUE, 
+                            selectcolor=DarkTheme.ACCENT_BLUE,
                             activebackground=DarkTheme.SELECTION_BG,
                             activeforeground=DarkTheme.SELECTION_FG,
                             font=('Segoe UI', 9))
         menubar.add_cascade(label="Tools", menu=tools_menu)
         tools_menu.add_command(label="Convert to Readable", command=self.convert_to_readable)
         tools_menu.add_command(label="Validate XML", command=self.validate_xml)
-        
+
         # Help menu
-        help_menu = tk.Menu(menubar, tearoff=0, 
-                           bg=DarkTheme.MENU_BG, 
+        help_menu = tk.Menu(menubar, tearoff=0,
+                           bg=DarkTheme.MENU_BG,
                            fg=DarkTheme.MENU_FG,
-                           selectcolor=DarkTheme.ACCENT_BLUE, 
+                           selectcolor=DarkTheme.ACCENT_BLUE,
                            activebackground=DarkTheme.SELECTION_BG,
                            activeforeground=DarkTheme.SELECTION_FG,
                            font=('Segoe UI', 9))
         menubar.add_cascade(label="Help", menu=help_menu)
         help_menu.add_command(label="About", command=self.show_about)
-        
+
         # Bind keyboard shortcuts
         self.root.bind('<Control-o>', lambda e: self.open_file())
         self.root.bind('<Control-s>', lambda e: self.save_file())
-        self.root.bind('<Control-f>', lambda e: self.show_find_dialog())
-    
+
     def create_toolbar(self):
         """Create the modern toolbar with dark theme"""
-        # Main toolbar frame with dark background
         toolbar_frame = ttk.Frame(self.root)
         toolbar_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
-        
+
         # File operations section
         file_frame = ttk.LabelFrame(toolbar_frame, text="File Operations", padding=10)
         file_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
-        
-        # Open button with icon-like styling
-        open_button = ttk.Button(file_frame, text="📁 Select XML File", 
-                                command=self.open_file, width=20)
-        open_button.pack(side=tk.LEFT, padx=2)
-        
-        # Save button
-        save_button = ttk.Button(file_frame, text="💾 Save", 
-                                command=self.save_file, width=20)
-        save_button.pack(side=tk.LEFT, padx=2)
-        
+
+        ttk.Button(file_frame, text="📁 Select XML File",
+                  command=self.open_file, width=20).pack(side=tk.LEFT, padx=2)
+        ttk.Button(file_frame, text="💾 Save",
+                  command=self.save_file, width=20).pack(side=tk.LEFT, padx=2)
+
         # Conversion section
         conversion_frame = ttk.LabelFrame(toolbar_frame, text="Format Conversion", padding=10)
         conversion_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
-        
-        # Convert to readable button
-        self.convert_button = ttk.Button(conversion_frame, text="🔄 Convert To Readable", 
+
+        self.convert_button = ttk.Button(conversion_frame, text="🔄 Convert To Readable",
                                         command=self.convert_to_readable, width=24)
         self.convert_button.pack(side=tk.LEFT, padx=2)
-        
-        # Save as binary button
-        self.save_binary_button = ttk.Button(conversion_frame, text="💽 Save To Binary", 
+
+        self.save_binary_button = ttk.Button(conversion_frame, text="💽 Save To Binary",
                                             command=self.save_as_binary, width=24)
         self.save_binary_button.pack(side=tk.LEFT, padx=2)
-        
-        # View operations section
-        view_frame = ttk.LabelFrame(toolbar_frame, text="View Options", padding=10)
-        view_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
-        
-        # Expand/Collapse buttons
-        ttk.Button(view_frame, text="➕ Expand All", 
-                  command=self.expand_all, width=20).pack(side=tk.LEFT, padx=2)
-        ttk.Button(view_frame, text="➖ Collapse All", 
-                  command=self.collapse_all, width=20).pack(side=tk.LEFT, padx=2)
-                
+
         # Disable buttons if no converter
         if not self.converter.can_convert:
             self.convert_button.config(state=tk.DISABLED)
             self.save_binary_button.config(state=tk.DISABLED)
-    
+
     def create_main_frame(self):
-        """Create the main content area with dark theme"""
-        # Create main container with padding
+        """Create the main content area — full-width CloseableNotebook"""
         main_container = ttk.Frame(self.root)
         main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        # Left panel - XML Tree view with fixed width
-        left_panel = ttk.LabelFrame(main_container, text="📁 XML Structure", padding=10, width=300)
-        left_panel.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 5))
-        left_panel.pack_propagate(False)  # Keep the fixed width
-        
-        # Tree controls frame
-        tree_controls = ttk.Frame(left_panel)
-        tree_controls.pack(fill=tk.X, pady=(0, 5))
-        
-        # File info label
-        self.file_info_label = ttk.Label(tree_controls, text="No file loaded", 
-                                        font=('Segoe UI', 9, 'italic'))
-        self.file_info_label.pack(side=tk.LEFT)
-        
-        # Tree frame with scrollbars
-        tree_frame = ttk.Frame(left_panel)
-        tree_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Create treeview with dark theme styling
-        self.tree = ttk.Treeview(tree_frame, show='tree')
-        
-        # Scrollbars for tree
-        tree_scrolly = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
-        tree_scrollx = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
-        self.tree.configure(yscrollcommand=tree_scrolly.set, xscrollcommand=tree_scrollx.set)
-        
-        # Pack tree and scrollbars
-        self.tree.grid(row=0, column=0, sticky="nsew")
-        tree_scrolly.grid(row=0, column=1, sticky="ns")
-        tree_scrollx.grid(row=1, column=0, sticky="ew")
-        tree_frame.grid_rowconfigure(0, weight=1)
-        tree_frame.grid_columnconfigure(0, weight=1)
-        
-        # Bind tree events
-        self.tree.bind('<<TreeviewSelect>>', self.on_tree_select)
-        
-        # Right panel - Element details with tabs (takes remaining space)
-        right_panel = ttk.LabelFrame(main_container, text="🔧 XML Details", padding=10)
-        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        
-        # Create notebook for tabbed interface
-        self.notebook = ttk.Notebook(right_panel)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
-        
-        # Bind tab change event to handle source sync
-        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
-                
-        # XML Source tab
-        source_frame = ttk.Frame(self.notebook)
-        self.notebook.add(source_frame, text="XML Source")
-        
-        self.create_source_tab(source_frame)
-        
-        # Statistics tab
-        stats_frame = ttk.Frame(self.notebook)
-        self.notebook.add(stats_frame, text="Statistics")
-        
-        self.create_statistics_tab(stats_frame)
 
-    def create_properties_tab(self, parent):
-        """Create the properties tab for element editing"""
-        # Element information section
-        info_section = ttk.LabelFrame(parent, text="Element Information", padding=10)
-        info_section.pack(fill=tk.X, pady=(0, 10))
-        
-        # Tag name
-        tag_frame = ttk.Frame(info_section)
-        tag_frame.pack(fill=tk.X, pady=2)
-        ttk.Label(tag_frame, text="Tag:", width=12).pack(side=tk.LEFT)
-        self.tag_var = tk.StringVar()
-        tag_entry = ttk.Entry(tag_frame, textvariable=self.tag_var, state="readonly",
-                             font=('Consolas', 10, 'bold'), style='Readonly.TEntry')
-        tag_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
-        
-        # Text content
-        text_frame = ttk.Frame(info_section)
-        text_frame.pack(fill=tk.X, pady=2)
-        ttk.Label(text_frame, text="Text:", width=12).pack(side=tk.LEFT)
-        self.text_var = tk.StringVar()
-        text_entry = ttk.Entry(text_frame, textvariable=self.text_var, font=('Consolas', 10))
-        text_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
-        
-        # Bind text change events
-        text_entry.bind('<KeyRelease>', self.on_text_change)
-        text_entry.bind('<FocusOut>', self.on_text_change)
-        self.text_var.trace('w', self.on_text_var_change)
-        
-        # Attributes section
-        attr_section = ttk.LabelFrame(parent, text="Attributes", padding=10)
-        attr_section.pack(fill=tk.BOTH, expand=True)
-        
-        # Attributes toolbar
-        attr_toolbar = ttk.Frame(attr_section)
-        attr_toolbar.pack(fill=tk.X, pady=(0, 5))
-        
-        ttk.Button(attr_toolbar, text="➕ Add", 
-                  command=self.add_attribute).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(attr_toolbar, text="✏️ Edit", 
-                  command=self.edit_selected_attribute).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(attr_toolbar, text="🗑️ Delete", 
-                  command=self.delete_attribute).pack(side=tk.LEFT, padx=(0, 5))
-        
-        # Attributes frame
-        attr_tree_frame = ttk.Frame(attr_section)
-        attr_tree_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Attributes treeview with dark theme styling
-        self.attr_tree = ttk.Treeview(attr_tree_frame, columns=("value",), height=12)
-        self.attr_tree.heading("#0", text="Attribute Name")
-        self.attr_tree.heading("value", text="Value")
-        self.attr_tree.column("#0", width=180, minwidth=100)
-        self.attr_tree.column("value", width=300, minwidth=150)
-        
-        # Attributes scrollbar
-        attr_scrolly = ttk.Scrollbar(attr_tree_frame, orient=tk.VERTICAL, 
-                                    command=self.attr_tree.yview)
-        self.attr_tree.configure(yscrollcommand=attr_scrolly.set)
-        
-        self.attr_tree.grid(row=0, column=0, sticky="nsew")
-        attr_scrolly.grid(row=0, column=1, sticky="ns")
-        attr_tree_frame.grid_rowconfigure(0, weight=1)
-        attr_tree_frame.grid_columnconfigure(0, weight=1)
-        
-        # Bind attribute editing
-        self.attr_tree.bind('<Double-1>', self.edit_attribute)
-    
-    def create_source_tab(self, parent):
-        """Create the XML source view tab with dark theme and editing capabilities"""
+        self.notebook = CloseableNotebook(main_container)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+
+    # ------------------------------------------------------------------ #
+    #  Tab management helpers
+    # ------------------------------------------------------------------ #
+
+    def get_active_tab(self):
+        """Return the open_files dict for the currently selected tab, or None."""
+        selected = self.notebook.select()
+        if not selected:
+            return None
+        return self.open_files.get(selected)
+
+    def close_tab(self, event=None):
+        """Close the tab whose path is stored in notebook._closed_tab."""
+        tab_frame_path = getattr(self.notebook, '_closed_tab', None)
+        if not tab_frame_path:
+            return
+        self._close_tab_by_path(tab_frame_path)
+
+    def close_active_tab(self, event=None):
+        """Close whichever tab is currently selected."""
+        selected = self.notebook.select()
+        if selected:
+            self._close_tab_by_path(selected)
+
+    def _close_tab_by_path(self, tab_frame_path):
+        """Internal: prompt-save if needed, then destroy the tab."""
+        if not tab_frame_path or tab_frame_path not in self.open_files:
+            return
+
+        tab_data = self.open_files[tab_frame_path]
+
+        if tab_data['modified'] or tab_data['source_modified']:
+            result = self.show_custom_messagebox_with_yesnocancel(
+                "Unsaved Changes",
+                f"'{os.path.basename(tab_data['file'])}' has unsaved changes.\n"
+                "Save before closing?",
+                "warning"
+            )
+            if result == "yes":
+                # Select this tab so save_file operates on it
+                self.notebook.select(tab_data['frame'])
+                self.save_file()
+                # If save failed the flags are still set — abort close
+                if tab_data['modified'] or tab_data['source_modified']:
+                    return
+            elif result == "cancel":
+                return
+            # "no" → close without saving
+
+        self.notebook.forget(tab_data['frame'])
+        del self.open_files[tab_frame_path]
+
+        if not self.open_files:
+            self.status_var.set("Ready - No file loaded")
+            self.modified_indicator.config(text="")
+            self.root.title("AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.2")
+
+    # ------------------------------------------------------------------ #
+    #  Per-tab UI builder
+    # ------------------------------------------------------------------ #
+
+    def create_file_tab(self, parent, tab_data):
+        """Build the full XML source editor UI inside a tab frame."""
         source_frame = ttk.Frame(parent)
         source_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # NEW: Search bar frame
+
+        # ---- Search bar ----
         search_frame = ttk.Frame(source_frame)
         search_frame.pack(fill=tk.X, pady=(0, 5))
-        
-        # Search controls
+
         ttk.Label(search_frame, text="Search:").pack(side=tk.LEFT, padx=(0, 5))
-        
-        self.search_var = tk.StringVar()
-        self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var, width=30)
-        self.search_entry.pack(side=tk.LEFT, padx=(0, 5))
-        
-        # Search buttons
-        ttk.Button(search_frame, text="Find", command=self.find_text, width=8).pack(side=tk.LEFT, padx=2)
-        ttk.Button(search_frame, text="Next", command=self.find_next, width=8).pack(side=tk.LEFT, padx=2)
-        ttk.Button(search_frame, text="Previous", command=self.find_previous, width=8).pack(side=tk.LEFT, padx=2)
-        ttk.Button(search_frame, text="Clear", command=self.clear_search, width=8).pack(side=tk.LEFT, padx=2)
-        
-        # Case sensitive checkbox
-        self.case_sensitive_var = tk.BooleanVar()
-        ttk.Checkbutton(search_frame, text="Case sensitive", 
-                    variable=self.case_sensitive_var).pack(side=tk.LEFT, padx=(10, 0))
-        
-        # Search result label
-        self.search_result_label = ttk.Label(search_frame, text="", foreground=DarkTheme.ACCENT_BLUE)
-        self.search_result_label.pack(side=tk.RIGHT)
-        
-        # Source text widget with scrollbars and dark theme - MADE EDITABLE
+
+        search_var = tk.StringVar()
+        search_entry = ttk.Entry(search_frame, textvariable=search_var, width=30)
+        search_entry.pack(side=tk.LEFT, padx=(0, 5))
+
+        ttk.Button(search_frame, text="Find",
+                   command=self.find_text, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_frame, text="Next",
+                   command=self.find_next, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_frame, text="Previous",
+                   command=self.find_previous, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_frame, text="Clear",
+                   command=self.clear_search, width=8).pack(side=tk.LEFT, padx=2)
+
+        case_sensitive_var = tk.BooleanVar()
+        ttk.Checkbutton(search_frame, text="Case sensitive",
+                        variable=case_sensitive_var).pack(side=tk.LEFT, padx=(10, 0))
+
+        search_result_label = ttk.Label(search_frame, text="",
+                                        foreground=DarkTheme.ACCENT_BLUE)
+        search_result_label.pack(side=tk.RIGHT)
+
+        # ---- Text widget with scrollbars ----
         text_frame = ttk.Frame(source_frame)
         text_frame.pack(fill=tk.BOTH, expand=True)
-        
-        self.source_text = tk.Text(text_frame, wrap=tk.NONE, 
-                                font=('Consolas', 10),
-                                bg=DarkTheme.BG_LIGHT, 
-                                fg=DarkTheme.FG_NORMAL, 
-                                insertbackground=DarkTheme.ACCENT_BLUE,
-                                selectbackground=DarkTheme.SELECTION_BG,
-                                selectforeground=DarkTheme.SELECTION_FG,
-                                borderwidth=1,
-                                relief='solid',
-                                state=tk.NORMAL)
-        
-        # Configure search highlighting tag with more visible colors
-        self.source_text.tag_configure("search_highlight", 
-                                    background="#000000",  # Bright yellow
-                                    foreground="#000000")  # Black text
-        self.source_text.tag_configure("current_match", 
-                                    background="#ffffff",  # Bright orange  
-                                    foreground="#ffffff")  # White text
-        
-        # Bind text modification events
-        self.source_text.bind('<KeyRelease>', self.on_source_text_change)
-        self.source_text.bind('<Button-1>', self.on_source_text_change)
-        self.source_text.bind('<Control-v>', self.on_source_text_change)
-        
-        # NEW: Bind Ctrl+F for search
-        self.source_text.bind('<Control-f>', self.focus_search)
-        self.source_text.bind('<F3>', lambda e: self.find_next())
-        self.source_text.bind('<Shift-F3>', lambda e: self.find_previous())
-        self.source_text.bind('<Escape>', self.clear_search)
-        
-        # Bind Enter in search box
-        self.search_entry.bind('<Return>', lambda e: self.find_next())
-        self.search_entry.bind('<Escape>', self.clear_search)
-        
-        # Scrollbars for source text
-        source_scrolly = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, 
-                                    command=self.source_text.yview)
-        source_scrollx = ttk.Scrollbar(text_frame, orient=tk.HORIZONTAL, 
-                                    command=self.source_text.xview)
-        self.source_text.configure(yscrollcommand=source_scrolly.set, 
-                                xscrollcommand=source_scrollx.set)
-        
-        self.source_text.grid(row=0, column=0, sticky="nsew")
+
+        source_text = tk.Text(text_frame, wrap=tk.NONE,
+                              font=('Consolas', 10),
+                              bg=DarkTheme.BG_LIGHT,
+                              fg=DarkTheme.FG_NORMAL,
+                              insertbackground=DarkTheme.ACCENT_BLUE,
+                              selectbackground=DarkTheme.SELECTION_BG,
+                              selectforeground=DarkTheme.SELECTION_FG,
+                              borderwidth=1,
+                              relief='solid',
+                              undo=True,
+                              state=tk.NORMAL)
+
+        # Configure search highlighting tags
+        source_text.tag_configure("search_highlight",
+                                  background="#ffff00",
+                                  foreground="#000000")
+        source_text.tag_configure("current_match",
+                                  background="#ff8c00",
+                                  foreground="#ffffff")
+
+        # Key bindings on the text widget
+        source_text.bind('<Double-Button-1>', self.on_source_double_click)
+        source_text.bind('<<Modified>>', self.on_source_text_change)
+        source_text.bind('<Control-z>', lambda e: self._safe_edit(source_text, 'undo'))
+        source_text.bind('<Control-y>', lambda e: self._safe_edit(source_text, 'redo'))
+        source_text.bind('<Control-Z>', lambda e: self._safe_edit(source_text, 'redo'))
+        source_text.bind('<Control-f>', self.focus_search)
+        source_text.bind('<F3>', lambda e: self.find_next())
+        source_text.bind('<Shift-F3>', lambda e: self.find_previous())
+        source_text.bind('<Escape>', self.clear_search)
+
+        # Search-entry shortcuts
+        search_entry.bind('<Return>', lambda e: self.find_next())
+        search_entry.bind('<Escape>', self.clear_search)
+
+        # Scrollbars
+        source_scrolly = ttk.Scrollbar(text_frame, orient=tk.VERTICAL,
+                                        command=source_text.yview)
+        source_scrollx = ttk.Scrollbar(text_frame, orient=tk.HORIZONTAL,
+                                        command=source_text.xview)
+        source_text.configure(yscrollcommand=source_scrolly.set,
+                               xscrollcommand=source_scrollx.set)
+
+        source_text.grid(row=0, column=0, sticky="nsew")
         source_scrolly.grid(row=0, column=1, sticky="ns")
         source_scrollx.grid(row=1, column=0, sticky="ew")
         text_frame.grid_rowconfigure(0, weight=1)
         text_frame.grid_columnconfigure(0, weight=1)
-        
-        # Source controls
+
+        # ---- Bottom controls ----
         source_controls = ttk.Frame(source_frame)
         source_controls.pack(fill=tk.X, pady=(10, 0))
-        
-        ttk.Button(source_controls, text="🔄 Refresh from Tree", 
-                command=self.refresh_source_view).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(source_controls, text="📋 Copy All", 
-                command=self.copy_source).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(source_controls, text="✅ Apply Changes to Tree", 
-                command=self.apply_source_changes).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(source_controls, text="🔍 Validate XML", 
-                command=self.validate_source_xml).pack(side=tk.LEFT, padx=(0, 5))
-        
-        # Initialize search variables
-        self.search_matches = []
-        self.current_match_index = -1
 
-    # NEW SEARCH METHODS - Add these to your GameXMLEditor class
+        ttk.Button(source_controls, text="📋 Copy All",
+                   command=self.copy_source).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(source_controls, text="✅ Apply Changes",
+                   command=self.apply_source_changes).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(source_controls, text="🔍 Validate XML",
+                   command=self.validate_source_xml).pack(side=tk.LEFT, padx=(0, 5))
+
+        # Store all widget refs into tab_data
+        tab_data['source_text'] = source_text
+        tab_data['search_entry'] = search_entry
+        tab_data['search_var'] = search_var
+        tab_data['search_result_label'] = search_result_label
+        tab_data['case_sensitive_var'] = case_sensitive_var
+        tab_data['search_matches'] = []
+        tab_data['current_match_index'] = -1
+
+    # ------------------------------------------------------------------ #
+    #  Search methods (all operate on the active tab)
+    # ------------------------------------------------------------------ #
 
     def focus_search(self, event=None):
-        """Focus on the search entry box"""
-        if hasattr(self, 'search_entry'):
-            self.search_entry.focus_set()
-            self.search_entry.select_range(0, tk.END)
-        return "break"  # Prevent default Ctrl+F behavior
+        """Focus the search entry in the active tab."""
+        tab = self.get_active_tab()
+        if tab is None:
+            return "break"
+        tab['search_entry'].focus_set()
+        tab['search_entry'].select_range(0, tk.END)
+        return "break"
 
     def find_text(self):
-        """Find all occurrences of search text"""
-        search_term = self.search_var.get()
+        """Find all occurrences of the search term in the active tab."""
+        tab = self.get_active_tab()
+        if tab is None:
+            return
+
+        search_term = tab['search_var'].get()
         if not search_term:
             self.clear_search()
             return
-        
-        # Clear previous highlights
-        self.source_text.tag_remove("search_highlight", "1.0", tk.END)
-        self.source_text.tag_remove("current_match", "1.0", tk.END)
-        
-        # Get all text content
-        content = self.source_text.get("1.0", tk.END)
-        
-        # Search options
-        if not self.case_sensitive_var.get():
+
+        source_text = tab['source_text']
+        source_text.tag_remove("search_highlight", "1.0", tk.END)
+        source_text.tag_remove("current_match", "1.0", tk.END)
+
+        content = source_text.get("1.0", tk.END)
+
+        if not tab['case_sensitive_var'].get():
             content_lower = content.lower()
             search_term_lower = search_term.lower()
         else:
             content_lower = content
             search_term_lower = search_term
-        
-        # Find all matches
-        self.search_matches = []
+
+        tab['search_matches'] = []
         start = 0
         while True:
             pos = content_lower.find(search_term_lower, start)
             if pos == -1:
                 break
-            
-            # Convert position to line.column format
+
             lines_before = content[:pos].count('\n')
             if lines_before == 0:
                 col = pos
             else:
                 last_newline = content.rfind('\n', 0, pos)
                 col = pos - last_newline - 1
-            
+
             start_pos = f"{lines_before + 1}.{col}"
             end_pos = f"{lines_before + 1}.{col + len(search_term)}"
-            
-            self.search_matches.append((start_pos, end_pos))
+            tab['search_matches'].append((start_pos, end_pos))
             start = pos + 1
-        
-        # Highlight all matches
-        for start_pos, end_pos in self.search_matches:
-            self.source_text.tag_add("search_highlight", start_pos, end_pos)
-        
-        # Update result display
-        if self.search_matches:
-            self.current_match_index = 0
+
+        for s, e in tab['search_matches']:
+            source_text.tag_add("search_highlight", s, e)
+
+        if tab['search_matches']:
+            tab['current_match_index'] = 0
             self.highlight_current_match()
-            self.search_result_label.config(text=f"{len(self.search_matches)} matches found")
+            tab['search_result_label'].config(
+                text=f"{len(tab['search_matches'])} matches found")
         else:
-            self.search_result_label.config(text="No matches found")
-            self.current_match_index = -1
+            tab['search_result_label'].config(text="No matches found")
+            tab['current_match_index'] = -1
 
     def find_next(self):
-        """Find next occurrence"""
-        if not self.search_matches:
+        """Move to the next search match."""
+        tab = self.get_active_tab()
+        if tab is None:
+            return
+        if not tab['search_matches']:
             self.find_text()
             return
-        
-        if self.search_matches:
-            self.current_match_index = (self.current_match_index + 1) % len(self.search_matches)
-            self.highlight_current_match()
+        tab['current_match_index'] = (tab['current_match_index'] + 1) % len(tab['search_matches'])
+        self.highlight_current_match()
 
     def find_previous(self):
-        """Find previous occurrence"""
-        if not self.search_matches:
+        """Move to the previous search match."""
+        tab = self.get_active_tab()
+        if tab is None:
+            return
+        if not tab['search_matches']:
             self.find_text()
             return
-        
-        if self.search_matches:
-            self.current_match_index = (self.current_match_index - 1) % len(self.search_matches)
-            self.highlight_current_match()
+        tab['current_match_index'] = (tab['current_match_index'] - 1) % len(tab['search_matches'])
+        self.highlight_current_match()
 
     def highlight_current_match(self):
-        """Highlight the current match and scroll to it"""
-        if self.current_match_index >= 0 and self.current_match_index < len(self.search_matches):
-            # Remove previous current match highlight
-            self.source_text.tag_remove("current_match", "1.0", tk.END)
-            
-            # Get current match position
-            start_pos, end_pos = self.search_matches[self.current_match_index]
-            
-            # Highlight current match
-            self.source_text.tag_add("current_match", start_pos, end_pos)
-            
-            # Scroll to current match
-            self.source_text.see(start_pos)
-            
-            # Update result label
-            self.search_result_label.config(
-                text=f"Match {self.current_match_index + 1} of {len(self.search_matches)}"
-            )
+        """Scroll to and highlight the current match."""
+        tab = self.get_active_tab()
+        if tab is None:
+            return
+        idx = tab['current_match_index']
+        matches = tab['search_matches']
+        if 0 <= idx < len(matches):
+            source_text = tab['source_text']
+            source_text.tag_remove("current_match", "1.0", tk.END)
+            start_pos, end_pos = matches[idx]
+            source_text.tag_add("current_match", start_pos, end_pos)
+            source_text.see(start_pos)
+            tab['search_result_label'].config(
+                text=f"Match {idx + 1} of {len(matches)}")
 
     def clear_search(self, event=None):
-        """Clear search highlights and results"""
-        if hasattr(self, 'source_text'):
-            self.source_text.tag_remove("search_highlight", "1.0", tk.END)
-            self.source_text.tag_remove("current_match", "1.0", tk.END)
-        
-        if hasattr(self, 'search_var'):
-            self.search_var.set("")
-        
-        if hasattr(self, 'search_result_label'):
-            self.search_result_label.config(text="")
-        
-        self.search_matches = []
-        self.current_match_index = -1
-        
-        return "break"  # Prevent default Escape behavior
-    
-    def create_statistics_tab(self, parent):
-        """Create the statistics tab with dark theme"""
-        stats_container = ttk.Frame(parent)
-        stats_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # File statistics
-        file_stats = ttk.LabelFrame(stats_container, text="File Statistics", padding=10)
-        file_stats.pack(fill=tk.X, pady=(0, 10))
-        
-        self.stats_file_size = ttk.Label(file_stats, text="File size: Not loaded")
-        self.stats_file_size.pack(anchor=tk.W)
-        
-        self.stats_last_modified = ttk.Label(file_stats, text="Last modified: Not loaded")
-        self.stats_last_modified.pack(anchor=tk.W)
-        
-        # Element statistics
-        element_stats = ttk.LabelFrame(stats_container, text="Element Statistics", padding=10)
-        element_stats.pack(fill=tk.X, pady=(0, 10))
-        
-        self.stats_total_elements = ttk.Label(element_stats, text="Total elements: 0")
-        self.stats_total_elements.pack(anchor=tk.W)
-        
-        self.stats_total_attributes = ttk.Label(element_stats, text="Total attributes: 0")
-        self.stats_total_attributes.pack(anchor=tk.W)
-        
-        self.stats_max_depth = ttk.Label(element_stats, text="Maximum depth: 0")
-        self.stats_max_depth.pack(anchor=tk.W)
-        
-        # Element types
-        types_frame = ttk.LabelFrame(stats_container, text="Element Types", padding=10)
-        types_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Create treeview for element types with scrollbar frame
-        stats_tree_frame = ttk.Frame(types_frame)
-        stats_tree_frame.pack(fill=tk.BOTH, expand=True)
-        
-        self.stats_tree = ttk.Treeview(stats_tree_frame, columns=("count",), height=10)
-        self.stats_tree.heading("#0", text="Element Type")
-        self.stats_tree.heading("count", text="Count")
-        self.stats_tree.column("#0", width=200)
-        self.stats_tree.column("count", width=100)
-        
-        stats_scrolly = ttk.Scrollbar(stats_tree_frame, orient=tk.VERTICAL, 
-                                     command=self.stats_tree.yview)
-        self.stats_tree.configure(yscrollcommand=stats_scrolly.set)
-        
-        self.stats_tree.grid(row=0, column=0, sticky="nsew")
-        stats_scrolly.grid(row=0, column=1, sticky="ns")
-        stats_tree_frame.grid_rowconfigure(0, weight=1)
-        stats_tree_frame.grid_columnconfigure(0, weight=1)
-    
+        """Clear all search highlights and reset state."""
+        tab = self.get_active_tab()
+        if tab is None:
+            return "break"
+        tab['source_text'].tag_remove("search_highlight", "1.0", tk.END)
+        tab['source_text'].tag_remove("current_match", "1.0", tk.END)
+        tab['search_var'].set("")
+        tab['search_result_label'].config(text="")
+        tab['search_matches'] = []
+        tab['current_match_index'] = -1
+        return "break"
+
+    # ------------------------------------------------------------------ #
+    #  About / validation / messaging
+    # ------------------------------------------------------------------ #
+
     def show_about(self):
         """Show about dialog with dark theme"""
-        # Create a custom dark-themed about dialog
         about_window = tk.Toplevel(self.root)
         about_window.title("About AVATAR XML File Editor")
         about_window.geometry("600x500")
@@ -1016,31 +1019,26 @@ class GameXMLEditor:
         about_window.resizable(False, False)
         about_window.transient(self.root)
         about_window.grab_set()
-        
-        # Center the window
+
         about_window.geometry("+%d+%d" % (
             self.root.winfo_rootx() + 500,
             self.root.winfo_rooty() + 300
         ))
-        
-        # Main frame
+
         main_frame = ttk.Frame(about_window)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
-        # Title
-        title_label = ttk.Label(main_frame, 
+
+        title_label = ttk.Label(main_frame,
                                text="🎮 AVATAR XML File Editor",
                                font=('Segoe UI', 16, 'bold'),
                                foreground=DarkTheme.ACCENT_BLUE)
         title_label.pack(pady=(0, 10))
-        
-        # Version
-        version_label = ttk.Label(main_frame, 
-                                 text="Version 1.5",
+
+        version_label = ttk.Label(main_frame,
+                                 text="Version 2.2",
                                  font=('Segoe UI', 10))
         version_label.pack(pady=(0, 20))
-        
-        # Description
+
         desc_text = """Welcome to Jasper's XML Editor!
 
         🎮 Designed specifically for AVATAR game file editing
@@ -1048,8 +1046,8 @@ class GameXMLEditor:
         What you can do:
         - Load .game.xml, .xml, and .rml game files
         - Convert binary formats to editable XML
-        - Browse file structure with the interactive tree view
         - Edit XML content directly in the source tab
+        - Open multiple files in VS Code-style tabs
         - Search through large files with Ctrl+F
         - Validate XML syntax in real-time
         - Save back to binary format for the game
@@ -1058,37 +1056,31 @@ class GameXMLEditor:
         🔧 Powered by Gibbed Dunia conversion tools
 
         Ready to start modding? Click 'Select XML File' to begin!"""
-        
-        desc_label = ttk.Label(main_frame, 
+
+        desc_label = ttk.Label(main_frame,
                               text=desc_text,
                               font=('Segoe UI', 9),
                               justify=tk.CENTER)
         desc_label.pack(pady=(0, 20))
-        
-        # OK button
-        ok_button = ttk.Button(main_frame, 
-                              text="OK",
-                              command=about_window.destroy,
-                              width=10)
+
+        ok_button = ttk.Button(main_frame, text="OK",
+                              command=about_window.destroy, width=10)
         ok_button.pack()
-        
-        # Focus and wait
         ok_button.focus_set()
         about_window.wait_window()
-    
+
     def validate_xml(self):
-        """Validate current XML structure"""
-        if not self.tree_data:
+        """Validate the active tab's XML structure."""
+        tab = self.get_active_tab()
+        if tab is None:
             self.show_custom_messagebox("No File", "No XML file is currently loaded.", "warning")
             return
-        
         try:
-            # Basic validation - try to write to string
-            ET.tostring(self.tree_data.getroot())
+            ET.tostring(tab['tree_data'].getroot())
             self.show_custom_messagebox("Validation Result", "XML structure is valid!", "info")
         except Exception as e:
             self.show_custom_messagebox("Validation Error", f"XML validation failed:\n{str(e)}", "error")
-    
+
     def show_custom_messagebox(self, title, message, msg_type="info"):
         """Show a custom dark-themed message box"""
         msg_window = tk.Toplevel(self.root)
@@ -1097,28 +1089,23 @@ class GameXMLEditor:
         msg_window.resizable(False, False)
         msg_window.transient(self.root)
         msg_window.grab_set()
-        
-        # Calculate size based on message length
+
         lines = message.split('\n')
         width = max(400, max(len(line) * 9 for line in lines) + 120)
         height = max(200, len(lines) * 30 + 150)
         msg_window.geometry(f"{width}x{height}")
-        
-        # Center the window
+
         msg_window.geometry("+%d+%d" % (
             self.root.winfo_rootx() + 200,
             self.root.winfo_rooty() + 200
         ))
-        
-        # Main frame
+
         main_frame = ttk.Frame(msg_window)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
-        # Icon and title
+
         icon_frame = ttk.Frame(main_frame)
         icon_frame.pack(fill=tk.X, pady=(0, 15))
-        
-        # Choose icon based on type
+
         if msg_type == "error":
             icon = "❌"
             color = DarkTheme.ACCENT_RED
@@ -1128,85 +1115,95 @@ class GameXMLEditor:
         else:
             icon = "ℹ️"
             color = DarkTheme.ACCENT_BLUE
-        
-        icon_label = ttk.Label(icon_frame, text=icon, font=('Segoe UI', 18))
-        icon_label.pack(side=tk.LEFT)
-        
-        title_label = ttk.Label(icon_frame, text=title, 
-                            font=('Segoe UI', 14, 'bold'),
-                            foreground=color)
-        title_label.pack(side=tk.LEFT, padx=(10, 0))
-        
-        # Message
-        msg_label = ttk.Label(main_frame, text=message,
-                            font=('Segoe UI', 11),
-                            justify=tk.LEFT,
-                            wraplength=width-60)
-        msg_label.pack(pady=(0, 20))
-        
-        # OK button
-        ok_button = ttk.Button(main_frame, 
-                            text="OK",
-                            command=msg_window.destroy,
-                            width=15)
+
+        ttk.Label(icon_frame, text=icon, font=('Segoe UI', 18)).pack(side=tk.LEFT)
+        ttk.Label(icon_frame, text=title, font=('Segoe UI', 14, 'bold'),
+                  foreground=color).pack(side=tk.LEFT, padx=(10, 0))
+
+        ttk.Label(main_frame, text=message, font=('Segoe UI', 11),
+                  justify=tk.LEFT, wraplength=width-60).pack(pady=(0, 20))
+
+        ok_button = ttk.Button(main_frame, text="OK",
+                               command=msg_window.destroy, width=15)
         ok_button.pack()
-        
-        # Focus and wait
         ok_button.focus_set()
         msg_window.wait_window()
+
+    def show_autoclose_messagebox(self, title, message, delay_ms=2000):
+        """Show a dark-themed info popup that automatically closes after delay_ms milliseconds."""
+        popup = tk.Toplevel(self.root)
+        popup.title(title)
+        popup.configure(bg=DarkTheme.BG_DARK)
+        popup.resizable(False, False)
+        popup.transient(self.root)
+        popup.grab_set()
+
+        lines = message.split('\n')
+        width = max(350, max(len(line) * 9 for line in lines) + 120)
+        height = max(150, len(lines) * 30 + 100)
+        popup.geometry(f"{width}x{height}+{self.root.winfo_rootx() + 200}+{self.root.winfo_rooty() + 200}")
+
+        main_frame = ttk.Frame(popup)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        icon_frame = ttk.Frame(main_frame)
+        icon_frame.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(icon_frame, text="✅", font=('Segoe UI', 18)).pack(side=tk.LEFT)
+        ttk.Label(icon_frame, text=title, font=('Segoe UI', 14, 'bold'),
+                  foreground=DarkTheme.ACCENT_GREEN).pack(side=tk.LEFT, padx=(10, 0))
+
+        ttk.Label(main_frame, text=message, font=('Segoe UI', 11),
+                  justify=tk.LEFT, wraplength=width - 60).pack(pady=(0, 10))
+
+        popup.after(delay_ms, popup.destroy)
 
     def open_file(self):
         """Select a binary .xml file to convert and make readable!"""
         filetypes = [
+            ("All supported files", "*.game.xml;*.xml;*.rml"),
             ("Game XML files", "*.game.xml"),
             ("XML files", "*.xml"),
             ("RML files", "*.rml"),
-            ("All supported files", "*.game.xml;*.xml;*.rml"),
             ("All files", "*.*")
         ]
-        
         filename = filedialog.askopenfilename(
             title="Open Game XML/RML File",
             filetypes=filetypes
         )
-        
         if filename:
             self.load_file(filename)
 
     def load_file(self, filename):
-        """Load and display a .game.xml file with enhanced error handling"""
+        """Load a file into a new tab (or switch to it if already open)."""
         try:
-            # Reset modification flags
-            self.source_modified = False
-            
-            # Determine if we need to convert based on file extension and format
+            # If already open, switch to that tab
+            for path, td in self.open_files.items():
+                if td['file'] == filename:
+                    self.notebook.select(td['frame'])
+                    return
+
+            # Determine if conversion is needed
             needs_conversion = False
             base, ext = os.path.splitext(filename)
-            
+
             if ext == '.rml':
-                # RML files always need conversion
                 needs_conversion = True
             else:
-                # Check if other files are in readable format
                 needs_conversion = not self.converter.is_file_xml_format(filename)
-            
+
             if needs_conversion:
-                # Ask user if they want to convert using custom messagebox
                 result = self.show_custom_messagebox_with_result(
                     "Binary Format Detected",
                     f"This {ext} file appears to be in binary format.\n\n"
                     "Would you like to convert it to readable XML format?",
                     "question"
                 )
-                
                 if result:
                     success, message = self.converter.convert_to_readable(filename)
                     if not success:
                         self.show_custom_messagebox("Conversion Failed", message, "error")
                         return
-                    self.show_custom_messagebox("Conversion Successful", message, "info")
-                    
-                    # For .rml files, we need to load the generated .xml file
+                    self.show_autoclose_messagebox("Conversion Successful", message, 2000)
                     if ext == '.rml':
                         xml_filename = base + '.xml'
                         if os.path.exists(xml_filename):
@@ -1215,35 +1212,57 @@ class GameXMLEditor:
                             self.show_custom_messagebox("Error", "Converted XML file not found", "error")
                             return
                 else:
-                    self.show_custom_messagebox("Cannot Edit",
-                                            "Cannot edit binary format files. Please convert first.",
-                                            "warning")
+                    self.show_custom_messagebox(
+                        "Cannot Edit",
+                        "Cannot edit binary format files. Please convert first.",
+                        "warning")
                     return
-            
-            # Parse the XML file
-            self.tree_data = ET.parse(filename)
-            self.current_file = filename
-            self.is_modified = False
-            
-            # Update tree display
-            self.update_tree_display()
-            
-            # Update file info
-            self.file_info_label.config(text=f"📄 {os.path.basename(filename)}")
-            
-            # Update window title
-            self.root.title(f"AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.1 | Current XML File Loaded: - {os.path.basename(filename)}")
+
+            # Parse the XML
+            tree_data = ET.parse(filename)
+
+            # Create the tab frame and add it to the notebook
+            tab_frame = ttk.Frame(self.notebook)
+            self.notebook.add(tab_frame, text=os.path.basename(filename))
+
+            # Build tab_data (widget refs filled in by create_file_tab)
+            tab_data = {
+                'file': filename,
+                'frame': tab_frame,
+                'tree_data': tree_data,
+                'source_text': None,
+                'search_entry': None,
+                'search_var': None,
+                'search_result_label': None,
+                'case_sensitive_var': None,
+                'search_matches': [],
+                'current_match_index': -1,
+                'source_modified': False,
+                'modified': False,
+                'updating_source': False,
+            }
+
+            # Build the UI inside the tab
+            self.create_file_tab(tab_frame, tab_data)
+
+            # Register the tab
+            self.open_files[str(tab_frame)] = tab_data
+
+            # Select it
+            self.notebook.select(tab_frame)
+
+            # Update title and status
+            self.root.title(
+                f"AVATAR XML File Editor | Made By: Jasper_Zebra | Version 2.2 | "
+                f"Current XML File Loaded: - {os.path.basename(filename)}")
             self.status_var.set(f"Loaded: {filename}")
-            
-            # Update statistics
-            self.update_statistics()
-            
-            # Update source view
+
+            # Populate the source view
             self.refresh_source_view()
-            
+
             # Clear modified indicator
             self.modified_indicator.config(text="")
-            
+
         except Exception as e:
             self.show_custom_messagebox("Error", f"Failed to load file:\n{str(e)}", "error")
 
@@ -1251,87 +1270,56 @@ class GameXMLEditor:
         """Create modern status bar with dark theme"""
         status_frame = ttk.Frame(self.root)
         status_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=5)
-        
-        # Status text
+
         self.status_var = tk.StringVar()
         status_label = ttk.Label(status_frame, textvariable=self.status_var,
                                 relief=tk.SUNKEN, font=('Segoe UI', 9))
         status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        
-        # Add file status indicators
-        self.modified_indicator = ttk.Label(status_frame, text="", 
+
+        self.modified_indicator = ttk.Label(status_frame, text="",
                                            font=('Segoe UI', 9, 'bold'))
         self.modified_indicator.pack(side=tk.RIGHT, padx=(10, 0))
 
-    def on_tab_changed(self, event):
-        """Handle tab change events to sync data between tabs"""
-        try:
-            current_tab = self.notebook.tab(self.notebook.select(), "text")
-            
-            # If switching TO the XML Source tab, refresh it with current tree data
-            if current_tab == "XML Source" and not self.updating_source:
-                self.refresh_source_view()
-            
-            # If switching FROM the XML Source tab and it was modified, ask to apply changes
-            elif self.source_modified and hasattr(self, 'previous_tab') and self.previous_tab == "XML Source":
-                result = self.show_custom_messagebox_with_yesnocancel(
-                    "Source Modified", 
-                    "The XML source has been modified. Do you want to apply the changes to the tree?",
-                    "question"
-                )
-                
-                if result == "yes":  # Yes - apply changes
-                    if self.apply_source_changes():
-                        self.source_modified = False
-                elif result == "no":  # No - discard changes
-                    self.source_modified = False
-                    self.refresh_source_view()  # Reload from tree
-                else:  # Cancel - go back to source tab
-                    # Switch back to source tab
-                    for i in range(self.notebook.index("end")):
-                        if self.notebook.tab(i, "text") == "XML Source":
-                            self.notebook.select(i)
-                            break
-                    return
-            
-            # Store current tab for next time
-            self.previous_tab = current_tab
-            
-        except Exception as e:
-            print(f"Error in tab change handler: {e}")
+    def on_tab_changed(self, event=None):
+        """Update status bar when the active tab changes."""
+        tab = self.get_active_tab()
+        if tab is None:
+            self.status_var.set("Ready")
+            self.modified_indicator.config(text="")
+            return
+        self.status_var.set(f"Editing: {tab['file']}")
+        if tab['modified'] or tab['source_modified']:
+            self.modified_indicator.config(text="●", foreground=DarkTheme.ACCENT_ORANGE)
+        else:
+            self.modified_indicator.config(text="")
 
     def show_custom_messagebox_with_yesnocancel(self, title, message, msg_type="info"):
         """Show a custom dark-themed message box with Yes/No/Cancel buttons"""
-        result = ["cancel"]  # Default to cancel
-        
+        result = ["cancel"]
+
         msg_window = tk.Toplevel(self.root)
         msg_window.title(title)
         msg_window.configure(bg=DarkTheme.BG_DARK)
         msg_window.resizable(False, False)
         msg_window.transient(self.root)
         msg_window.grab_set()
-        
-        # Calculate size based on message length
+
         lines = message.split('\n')
         width = max(400, max(len(line) * 9 for line in lines) + 120)
         height = max(200, len(lines) * 30 + 150)
         msg_window.geometry(f"{width}x{height}")
-        
-        # Center the window
+
         msg_window.geometry("+%d+%d" % (
             self.root.winfo_rootx() + 200,
             self.root.winfo_rooty() + 200
         ))
-        
-        # Main frame
+
         main_frame = ttk.Frame(msg_window)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
-        # Icon and title
+
         icon_frame = ttk.Frame(main_frame)
         icon_frame.pack(fill=tk.X, pady=(0, 15))
-        
-        # Choose icon based on type
+
         if msg_type == "error":
             icon = "❌"
             color = DarkTheme.ACCENT_RED
@@ -1344,644 +1332,294 @@ class GameXMLEditor:
         else:
             icon = "ℹ️"
             color = DarkTheme.ACCENT_BLUE
-        
-        icon_label = ttk.Label(icon_frame, text=icon, font=('Segoe UI', 18))
-        icon_label.pack(side=tk.LEFT)
-        
-        title_label = ttk.Label(icon_frame, text=title, 
-                            font=('Segoe UI', 14, 'bold'),
-                            foreground=color)
-        title_label.pack(side=tk.LEFT, padx=(10, 0))
-        
-        # Message
-        msg_label = ttk.Label(main_frame, text=message,
-                            font=('Segoe UI', 11),
-                            justify=tk.LEFT,
-                            wraplength=width-60)
-        msg_label.pack(pady=(0, 20))
-        
-        # Button frame for Yes/No/Cancel buttons
+
+        ttk.Label(icon_frame, text=icon, font=('Segoe UI', 18)).pack(side=tk.LEFT)
+        ttk.Label(icon_frame, text=title, font=('Segoe UI', 14, 'bold'),
+                  foreground=color).pack(side=tk.LEFT, padx=(10, 0))
+
+        ttk.Label(main_frame, text=message, font=('Segoe UI', 11),
+                  justify=tk.LEFT, wraplength=width-60).pack(pady=(0, 20))
+
         button_frame = ttk.Frame(main_frame)
         button_frame.pack()
-        
+
         def on_yes():
             result[0] = "yes"
             msg_window.destroy()
-            
+
         def on_no():
             result[0] = "no"
             msg_window.destroy()
-            
+
         def on_cancel():
             result[0] = "cancel"
             msg_window.destroy()
-        
-        # Yes/No/Cancel buttons
-        yes_button = ttk.Button(button_frame, 
-                            text="Yes",
-                            command=on_yes,
-                            width=12)
+
+        yes_button = ttk.Button(button_frame, text="Yes", command=on_yes, width=12)
         yes_button.pack(side=tk.LEFT, padx=5)
-        
-        no_button = ttk.Button(button_frame, 
-                            text="No",
-                            command=on_no,
-                            width=12)
-        no_button.pack(side=tk.LEFT, padx=5)
-        
-        cancel_button = ttk.Button(button_frame, 
-                                text="Cancel",
-                                command=on_cancel,
-                                width=12)
-        cancel_button.pack(side=tk.LEFT, padx=5)
-        
-        # Focus and wait
+        ttk.Button(button_frame, text="No", command=on_no, width=12).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=on_cancel, width=12).pack(side=tk.LEFT, padx=5)
+
         yes_button.focus_set()
         msg_window.wait_window()
-        
+
         return result[0]
 
+    def on_source_double_click(self, event):
+        """Select only the word under cursor using VS Code-style word chars (alphanumeric + underscore)."""
+        import re
+        widget = event.widget
+        index = widget.index(f"@{event.x},{event.y}")
+        line_num, col = map(int, index.split('.'))
+        line_text = widget.get(f"{line_num}.0", f"{line_num}.end")
+        word_char = re.compile(r'[A-Za-z0-9_]')
+        if col < len(line_text) and word_char.match(line_text[col]):
+            start = col
+            end = col
+            while start > 0 and word_char.match(line_text[start - 1]):
+                start -= 1
+            while end < len(line_text) and word_char.match(line_text[end]):
+                end += 1
+            widget.tag_remove('sel', '1.0', tk.END)
+            widget.tag_add('sel', f"{line_num}.{start}", f"{line_num}.{end}")
+            widget.mark_set('insert', f"{line_num}.{end}")
+        return 'break'
+
     def on_source_text_change(self, event=None):
-        """Handle changes to the source text widget"""
-        if not self.updating_source and self.tree_data:
-            self.source_modified = True
+        """Handle changes to the source text widget."""
+        tab = self.get_active_tab()
+        if tab is None:
+            return
+        widget = event.widget if event else None
+        if widget:
+            widget.edit_modified(False)  # Reset so the event fires again on next change
+        if not tab['updating_source'] and tab['tree_data']:
+            tab['source_modified'] = True
             self.mark_modified()
-            self.status_var.set("XML source modified - use 'Apply Changes to Tree' or save to apply")
+            self.status_var.set("XML source modified - use 'Apply Changes' or save to apply")
 
     def apply_source_changes(self):
-        """Apply changes from the source text widget back to the XML tree"""
+        """Apply source text edits back to the in-memory XML tree."""
+        tab = self.get_active_tab()
+        if tab is None:
+            return False
         try:
-            # Get the current source text
-            source_content = self.source_text.get(1.0, tk.END).strip()
-            
+            source_content = tab['source_text'].get(1.0, tk.END).strip()
             if not source_content:
                 self.show_custom_messagebox("Error", "Source content is empty.", "error")
                 return False
-            
-            # Try to parse the XML
+
             try:
-                # Parse the XML string
                 new_root = ET.fromstring(source_content)
-                
-                # Create a new ElementTree
                 new_tree = ET.ElementTree(new_root)
-                
-                # Replace the current tree data
-                self.tree_data = new_tree
-                self.source_modified = False
-                
-                # Update all displays
-                self.updating_source = True  # Prevent recursive updates
+                tab['tree_data'] = new_tree
+                tab['source_modified'] = False
+
+                tab['updating_source'] = True
                 try:
-                    self.update_tree_display()
-                    self.update_statistics()
-                    self.refresh_source_view()  # Reformat and re-highlight
+                    self.refresh_source_view()
                 finally:
-                    self.updating_source = False
-                
-                # Clear any selection and update details
-                self.clear_element_details()
-                
+                    tab['updating_source'] = False
+
                 self.status_var.set("XML source changes applied successfully")
-                self.show_custom_messagebox("Success", "XML source changes have been applied to the tree structure.", "info")
+                self.show_custom_messagebox(
+                    "Success",
+                    "XML source changes have been applied to the tree structure.",
+                    "info")
                 return True
-                
+
             except ET.ParseError as e:
-                error_msg = f"XML Parse Error: {str(e)}"
-                self.show_custom_messagebox("Parse Error", error_msg, "error")
+                self.show_custom_messagebox("Parse Error", f"XML Parse Error: {str(e)}", "error")
                 self.status_var.set("XML parsing failed - check syntax")
                 return False
-                
+
         except Exception as e:
-            error_msg = f"Error applying source changes: {str(e)}"
-            self.show_custom_messagebox("Error", error_msg, "error")
+            self.show_custom_messagebox("Error", f"Error applying source changes: {str(e)}", "error")
             return False
 
     def validate_source_xml(self):
-        """Validate the XML syntax in the source text widget"""
+        """Validate the XML syntax in the active tab's source widget."""
+        tab = self.get_active_tab()
+        if tab is None:
+            self.show_custom_messagebox("No File", "No file is currently loaded.", "warning")
+            return
         try:
-            source_content = self.source_text.get(1.0, tk.END).strip()
-            
+            source_content = tab['source_text'].get(1.0, tk.END).strip()
             if not source_content:
                 self.show_custom_messagebox("Validation", "Source content is empty.", "warning")
                 return
-            
-            # Try to parse the XML
             try:
                 ET.fromstring(source_content)
                 self.show_custom_messagebox("Validation Result", "XML syntax is valid!", "info")
                 self.status_var.set("XML validation successful")
             except ET.ParseError as e:
-                # Get line and column info if available
                 error_info = str(e)
                 if hasattr(e, 'lineno') and hasattr(e, 'offset'):
                     error_info += f"\nLine: {e.lineno}, Column: {e.offset}"
-                
-                self.show_custom_messagebox("Validation Error", f"XML Parse Error:\n{error_info}", "error")
+                self.show_custom_messagebox("Validation Error",
+                                            f"XML Parse Error:\n{error_info}", "error")
                 self.status_var.set("XML validation failed")
-                
         except Exception as e:
-            self.show_custom_messagebox("Validation Error", f"Error during validation: {str(e)}", "error")
+            self.show_custom_messagebox("Validation Error",
+                                        f"Error during validation: {str(e)}", "error")
 
     def save_file(self):
-        """Save the current file with enhanced feedback and source sync"""
-        if not self.current_file:
+        """Save the active tab's file."""
+        tab = self.get_active_tab()
+        if tab is None:
             self.show_custom_messagebox("No File", "No file is currently open.", "warning")
             return
-        
-        if not self.tree_data:
+
+        if not tab['tree_data']:
             self.show_custom_messagebox("No Data", "No data to save.", "warning")
             return
-        
-        # If source was modified, apply changes first
-        if self.source_modified:
-            result = self.show_custom_messagebox_with_result(
-                "Source Modified", 
-                "The XML source has been modified. Apply changes before saving?",
-                "question"
-            )
-            
-            if result:
-                if not self.apply_source_changes():
-                    return  # Don't save if applying changes failed
-            else:
-                self.source_modified = False  # User chose to discard source changes
-        
+
+        # Auto-apply source changes before saving
+        if tab['source_modified']:
+            if not self.apply_source_changes():
+                return
+
         try:
             from config import EDITOR_SETTINGS
-            if os.path.exists(self.current_file) and EDITOR_SETTINGS.get("auto_backup", False):
-                backup_path = self.current_file + ".backup"
+            if os.path.exists(tab['file']) and EDITOR_SETTINGS.get("auto_backup", False):
+                backup_path = tab['file'] + ".backup"
                 import shutil
-                shutil.copy2(self.current_file, backup_path)
-                self.status_var.set(f"Backup created: {os.path.basename(backup_path)}")   
+                shutil.copy2(tab['file'], backup_path)
+                self.status_var.set(f"Backup created: {os.path.basename(backup_path)}")
 
-            # Write XML file with pretty formatting
-            self.indent_xml(self.tree_data.getroot())
-            self.tree_data.write(self.current_file, encoding="utf-8", xml_declaration=True)
-            
-            # Reset modification status
-            self.is_modified = False
-            self.source_modified = False
-            self.root.title(self.root.title().rstrip(" *"))
+            # Write with pretty formatting
+            self.indent_xml(tab['tree_data'].getroot())
+            tab['tree_data'].write(tab['file'], encoding="utf-8", xml_declaration=True)
+
+            # Reset modification flags
+            tab['modified'] = False
+            tab['source_modified'] = False
+
+            # Remove ● from tab title
+            self.notebook.tab(tab['frame'], text=os.path.basename(tab['file']))
+
             self.modified_indicator.config(text="✓", foreground=DarkTheme.ACCENT_GREEN)
-            self.file_info_label.config(text=f"📄 {os.path.basename(self.current_file)}")
-            
-            # Update statistics and source view
-            self.update_statistics()
+
+            # Refresh source view to reflect indentation normalisation
             self.refresh_source_view()
-            
-            # Show success message with custom messagebox
-            self.show_custom_messagebox("File Saved", f"Successfully saved: {os.path.basename(self.current_file)}", "info")
-                        
+
+            self.status_var.set(f"Saved: {os.path.basename(tab['file'])}")
+
         except Exception as e:
             self.show_custom_messagebox("Save Error", f"Failed to save file:\n{str(e)}", "error")
 
-    def refresh_source_view(self):
-        """Refresh the XML source view with dark theme syntax highlighting"""
-        if not self.tree_data:
-            self.source_text.delete(1.0, tk.END)
-            return
-        
+    def _safe_edit(self, widget, action):
         try:
-            self.updating_source = True  # Prevent modification detection during refresh
-            
-            # Pretty print the XML
-            self.indent_xml(self.tree_data.getroot())
-            xml_str = ET.tostring(self.tree_data.getroot(), 
-                                 encoding='unicode', method='xml')
-            
-            # Add XML declaration
+            widget.edit(action)
+        except Exception:
+            pass
+        tab = self.get_active_tab()
+        if tab and not widget.edit_modified():
+            tab['source_modified'] = False
+            tab['modified'] = False
+            self.notebook.tab(tab['frame'], text=os.path.basename(tab['file']))
+            self.modified_indicator.config(text="✓", foreground=DarkTheme.ACCENT_GREEN)
+        return 'break'
+
+    def _clear_source_modified(self, tab):
+        """Reset all modified state after a programmatic source refresh."""
+        tab['source_text'].edit_reset()
+        tab['source_text'].edit_modified(False)
+        tab['source_modified'] = False
+        tab['modified'] = False
+        self.notebook.tab(tab['frame'], text=os.path.basename(tab['file']))
+        self.modified_indicator.config(text="✓", foreground=DarkTheme.ACCENT_GREEN)
+
+    def refresh_source_view(self):
+        """Repopulate the source text widget from the in-memory XML tree."""
+        tab = self.get_active_tab()
+        if tab is None:
+            return
+
+        if not tab['tree_data']:
+            tab['source_text'].delete(1.0, tk.END)
+            return
+
+        try:
+            tab['updating_source'] = True
+
+            self.indent_xml(tab['tree_data'].getroot())
+            xml_str = ET.tostring(tab['tree_data'].getroot(),
+                                  encoding='unicode', method='xml')
+
             if not xml_str.startswith('<?xml'):
                 xml_str = '<?xml version="1.0" encoding="utf-8"?>\n' + xml_str
-            
-            # Update text widget
-            self.source_text.delete(1.0, tk.END)
-            self.source_text.insert(1.0, xml_str)
-            
-            # Apply dark theme syntax highlighting
-            self.apply_dark_highlighting()
-            
-            # Reset modification flag
-            self.source_modified = False
-            
-        except Exception as e:
-            self.source_text.delete(1.0, tk.END)
-            self.source_text.insert(1.0, f"Error generating source view: {str(e)}")
-        finally:
-            self.updating_source = False
 
-    def update_statistics(self):
-        """Update file and element statistics"""
-        if not self.tree_data or not self.current_file:
-            return
-        
-        try:
-            # File statistics
-            if os.path.exists(self.current_file):
-                file_size = os.path.getsize(self.current_file)
-                size_str = f"{file_size:,} bytes"
-                if file_size > 1024:
-                    size_str += f" ({file_size/1024:.1f} KB)"
-                if file_size > 1024*1024:
-                    size_str += f" ({file_size/(1024*1024):.1f} MB)"
-                
-                self.stats_file_size.config(text=f"File size: {size_str}")
-                
-                import time
-                mod_time = os.path.getmtime(self.current_file)
-                mod_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mod_time))
-                self.stats_last_modified.config(text=f"Last modified: {mod_str}")
-            
-            # Element statistics
-            root = self.tree_data.getroot()
-            element_count = len(list(root.iter()))
-            attr_count = sum(len(elem.attrib) for elem in root.iter())
-            max_depth = self.calculate_max_depth(root)
-            
-            # Count element types
-            element_types = {}
-            for elem in root.iter():
-                tag = elem.tag
-                element_types[tag] = element_types.get(tag, 0) + 1
-            
-            # Update labels
-            self.stats_total_elements.config(text=f"Total elements: {element_count:,}")
-            self.stats_total_attributes.config(text=f"Total attributes: {attr_count:,}")
-            self.stats_max_depth.config(text=f"Maximum depth: {max_depth}")
-            
-            # Update types tree
-            self.stats_tree.delete(*self.stats_tree.get_children())
-            for tag, count in sorted(element_types.items(), key=lambda x: x[1], reverse=True):
-                self.stats_tree.insert("", "end", text=tag, values=(count,))
-        
+            tab['source_text'].delete(1.0, tk.END)
+            tab['source_text'].insert(1.0, xml_str)
+
+            self.apply_dark_highlighting(tab['source_text'])
+
+            tab['source_modified'] = False
+
         except Exception as e:
-            print(f"Error updating statistics: {e}")
-    
-    def calculate_max_depth(self, element, current_depth=0):
-        """Calculate maximum depth of XML tree"""
-        if not list(element):
-            return current_depth
-        return max(self.calculate_max_depth(child, current_depth + 1) 
-                  for child in element)
-    
-    def apply_dark_highlighting(self):
-        """Apply dark theme syntax highlighting to XML source"""
+            tab['source_text'].delete(1.0, tk.END)
+            tab['source_text'].insert(1.0, f"Error generating source view: {str(e)}")
+        finally:
+            tab['updating_source'] = False
+            # Schedule reset after the event loop processes the queued <<Modified>> event
+            self.root.after(0, lambda t=tab: self._clear_source_modified(t))
+
+    def apply_dark_highlighting(self, source_text):
+        """Apply dark-theme syntax highlighting to a source Text widget."""
         try:
-            # Configure text tags for dark theme highlighting
-            self.source_text.tag_configure("tag", foreground=DarkTheme.XML_TAG)
-            self.source_text.tag_configure("attr", foreground=DarkTheme.XML_ATTR)
-            self.source_text.tag_configure("string", foreground=DarkTheme.XML_STRING)
-            self.source_text.tag_configure("comment", foreground=DarkTheme.XML_COMMENT)
-            self.source_text.tag_configure("declaration", foreground=DarkTheme.ACCENT_PURPLE)
-            
-            # Simple pattern matching for highlighting
-            content = self.source_text.get(1.0, tk.END)
+            source_text.tag_configure("tag", foreground=DarkTheme.XML_TAG)
+            source_text.tag_configure("attr", foreground=DarkTheme.XML_ATTR)
+            source_text.tag_configure("string", foreground=DarkTheme.XML_STRING)
+            source_text.tag_configure("comment", foreground=DarkTheme.XML_COMMENT)
+            source_text.tag_configure("declaration", foreground=DarkTheme.ACCENT_PURPLE)
+
+            content = source_text.get(1.0, tk.END)
             lines = content.split('\n')
-            
+
+            import re
             for i, line in enumerate(lines):
-                # Highlight XML declaration
-                import re
                 for match in re.finditer(r'<\?xml.*?\?>', line):
-                    start_pos = f"{i+1}.{match.start()}"
-                    end_pos = f"{i+1}.{match.end()}"
-                    self.source_text.tag_add("declaration", start_pos, end_pos)
-                
-                # Highlight XML tags
+                    source_text.tag_add("declaration",
+                                        f"{i+1}.{match.start()}", f"{i+1}.{match.end()}")
                 for match in re.finditer(r'<[^>]+>', line):
-                    start_pos = f"{i+1}.{match.start()}"
-                    end_pos = f"{i+1}.{match.end()}"
-                    self.source_text.tag_add("tag", start_pos, end_pos)
-                
-                # Highlight attribute values
+                    source_text.tag_add("tag",
+                                        f"{i+1}.{match.start()}", f"{i+1}.{match.end()}")
                 for match in re.finditer(r'="[^"]*"', line):
-                    start_pos = f"{i+1}.{match.start()}"
-                    end_pos = f"{i+1}.{match.end()}"
-                    self.source_text.tag_add("string", start_pos, end_pos)
-                
-                # Highlight comments
+                    source_text.tag_add("string",
+                                        f"{i+1}.{match.start()}", f"{i+1}.{match.end()}")
                 for match in re.finditer(r'<!--.*?-->', line):
-                    start_pos = f"{i+1}.{match.start()}"
-                    end_pos = f"{i+1}.{match.end()}"
-                    self.source_text.tag_add("comment", start_pos, end_pos)
-        
+                    source_text.tag_add("comment",
+                                        f"{i+1}.{match.start()}", f"{i+1}.{match.end()}")
         except Exception as e:
             print(f"Error applying highlighting: {e}")
-    
+
     def copy_source(self):
-        """Copy source to clipboard"""
+        """Copy the active tab's source to the clipboard."""
+        tab = self.get_active_tab()
+        if tab is None:
+            return
         self.root.clipboard_clear()
-        self.root.clipboard_append(self.source_text.get(1.0, tk.END))
+        self.root.clipboard_append(tab['source_text'].get(1.0, tk.END))
         self.status_var.set("XML source copied to clipboard")
-    
-    def edit_selected_attribute(self):
-        """Edit the currently selected attribute"""
-        selection = self.attr_tree.selection()
-        if not selection:
-            self.show_custom_messagebox("No Selection", "Please select an attribute to edit.", "warning")
-            return
-        
-        # Simulate double-click on selected item
-        item = selection[0]
-        self.edit_attribute(None, item=item)
-    
-    def update_tree_display(self):
-        """Update the tree view with current XML data"""
-        # Clear existing tree and element map
-        self.tree.delete(*self.tree.get_children())
-        self.element_map = {}
-        
-        if self.tree_data is None:
-            return
-        
-        # Add root element
-        root_element = self.tree_data.getroot()
-        self.add_element_to_tree("", root_element)
-        
-        # Expand root by default
-        children = self.tree.get_children()
-        if children:
-            self.tree.item(children[0], open=True)
-            self.tree.selection_set(children[0])
-            self.tree.focus(children[0])
-    
-    def add_element_to_tree(self, parent, element):
-        """Recursively add elements to the tree view with improved display"""
-        # Create display text with better formatting
-        display_text = element.tag
-        
-        # Add attribute count if any
-        if element.attrib:
-            display_text += f" ({len(element.attrib)} attrs)"
-        
-        # Add text content preview if any
-        if element.text and element.text.strip():
-            text_preview = element.text.strip()
-            if len(text_preview) > 30:
-                text_preview = text_preview[:30] + "..."
-            display_text += f" = '{text_preview}'"
-        
-        # Add child count if any
-        child_count = len(list(element))
-        if child_count > 0:
-            display_text += f" [{child_count} children]"
-        
-        # Insert item with improved styling
-        item_id = self.tree.insert(parent, "end", text=display_text)
-        
-        # Store element reference in the element map
-        self.element_map[item_id] = element
-        
-        # Add children
-        for child in element:
-            self.add_element_to_tree(item_id, child)
-        
-        return item_id
-    
-    def on_tree_select(self, event):
-        """Handle tree selection change with enhanced UI updates"""
-        selection = self.tree.selection()
-        if not selection:
-            return
-        
-        # Get selected element using the element map
-        item = selection[0]
-        if item in self.element_map:
-            element = self.element_map[item]
-            self.update_element_details(element)
-        else:
-            # Clear details if no element found
-            self.clear_element_details()
-    
-    def update_element_details(self, element):
-        """Update the element details panel with enhanced information"""
-        # Since Properties tab was removed, we'll just update the status bar
-        # Update status bar with element info
-        attr_count = len(element.attrib)
-        child_count = len(list(element))
-        text_content = element.text.strip() if element.text else ""
-        text_preview = f" | Text: '{text_content[:30]}...'" if text_content else ""
-        
-        self.status_var.set(f"Selected: {element.tag} | {attr_count} attributes | {child_count} children{text_preview}")
 
-    def clear_element_details(self):
-        """Clear the element details panel"""
-        self.status_var.set("No element selected")
-
-    def on_text_var_change(self, *args):
-        """Handle StringVar changes for text content"""
-        self.on_text_change(None)
-    
-    def on_text_change(self, event):
-        """Handle text content change with improved feedback"""
-        selection = self.tree.selection()
-        if not selection:
-            return
-        
-        # Get selected element and update its text
-        item = selection[0]
-        if item in self.element_map:
-            element = self.element_map[item]
-            new_text = self.text_var.get()
-            
-            # Only update if the text actually changed
-            if element.text != new_text:
-                element.text = new_text
-                self.mark_modified()
-                
-                # Update tree display immediately
-                self.update_tree_item_text(item, element)
-                
-                # Refresh source view if visible
-                current_tab = self.notebook.tab(self.notebook.select(), "text")
-                if current_tab == "XML Source":
-                    self.refresh_source_view()
-    
-    def update_tree_item_text(self, item, element):
-        """Update tree item display text with enhanced formatting"""
-        display_text = element.tag
-        
-        # Add attribute count
-        if element.attrib:
-            display_text += f" ({len(element.attrib)} attrs)"
-        
-        # Add text content preview
-        if element.text and element.text.strip():
-            text_preview = element.text.strip()
-            if len(text_preview) > 30:
-                text_preview = text_preview[:30] + "..."
-            display_text += f" = '{text_preview}'"
-        
-        # Add child count
-        child_count = len(list(element))
-        if child_count > 0:
-            display_text += f" [{child_count} children]"
-        
-        self.tree.item(item, text=display_text)
-    
-    def edit_attribute(self, event, item=None):
-        """Edit selected attribute with improved handling"""
-        if item is None:
-            selection = self.attr_tree.selection()
-            if not selection:
-                return
-            item = selection[0]
-        
-        attr_name = self.attr_tree.item(item, "text")
-        attr_values = self.attr_tree.item(item, "values")
-        
-        # Handle case where value might be empty
-        attr_value = attr_values[0] if attr_values else ""
-        
-        # Create edit dialog
-        dialog = AttributeEditDialog(self.root, attr_name, attr_value)
-        
-        # Wait for dialog to complete
-        self.root.wait_window(dialog.dialog)
-        
-        # Check if we have a result
-        if hasattr(dialog, 'result') and dialog.result:
-            new_name, new_value = dialog.result
-            
-            # Update in XML
-            tree_selection = self.tree.selection()
-            if tree_selection:
-                tree_item = tree_selection[0]
-                if tree_item in self.element_map:
-                    element = self.element_map[tree_item]
-                    
-                    # Remove old attribute if name changed
-                    if new_name != attr_name and attr_name in element.attrib:
-                        del element.attrib[attr_name]
-                    
-                    # Set new attribute
-                    element.attrib[new_name] = new_value
-                    
-                    # Update displays
-                    self.refresh_attribute_display(element)
-                    self.update_tree_item_text(tree_item, element)
-                    self.mark_modified()
-                    
-                    # Refresh source view if visible
-                    current_tab = self.notebook.tab(self.notebook.select(), "text")
-                    if current_tab == "XML Source":
-                        self.refresh_source_view()
-    
-    def add_attribute(self):
-        """Add new attribute to selected element with improved UX"""
-        tree_selection = self.tree.selection()
-        if not tree_selection:
-            self.show_custom_messagebox("No Selection", "Please select an element first.", "warning")
-            return
-        
-        # Create edit dialog for new attribute
-        dialog = AttributeEditDialog(self.root, "", "")
-        
-        # Wait for dialog to complete
-        self.root.wait_window(dialog.dialog)
-        
-        # Check if we have a result
-        if hasattr(dialog, 'result') and dialog.result:
-            attr_name, attr_value = dialog.result
-            
-            # Check if attribute already exists
-            tree_item = tree_selection[0]
-            if tree_item in self.element_map:
-                element = self.element_map[tree_item]
-                
-                if attr_name in element.attrib:
-                    result = messagebox.askyesno("Attribute Exists", 
-                                               f"Attribute '{attr_name}' already exists. Replace it?")
-                    if not result:
-                        return
-                
-                # Add to XML
-                element.attrib[attr_name] = attr_value
-                
-                # Update displays
-                self.refresh_attribute_display(element)
-                self.update_tree_item_text(tree_item, element)
-                self.mark_modified()
-                
-                # Select the new attribute
-                for item_id in self.attr_tree.get_children():
-                    if self.attr_tree.item(item_id, "text") == attr_name:
-                        self.attr_tree.selection_set(item_id)
-                        self.attr_tree.focus(item_id)
-                        break
-                
-                self.status_var.set(f"Added attribute: {attr_name}")
-    
-    def refresh_attribute_display(self, element):
-        """Refresh the attribute display with enhanced formatting"""
-        # Clear and rebuild the attribute tree
-        self.attr_tree.delete(*self.attr_tree.get_children())
-        
-        # Add all attributes with better formatting
-        for attr_name, attr_value in sorted(element.attrib.items()):
-            # Truncate long values for display
-            display_value = str(attr_value)
-            if len(display_value) > 50:
-                display_value = display_value[:50] + "..."
-            
-            item_id = self.attr_tree.insert("", "end", text=attr_name, values=(display_value,))
-            
-            # Add tooltip for long values
-            if len(str(attr_value)) > 50:
-                self.attr_tree.set(item_id, "value", display_value + " [...]")
-    
-    def delete_attribute(self):
-        """Delete selected attribute with enhanced confirmation"""
-        selection = self.attr_tree.selection()
-        if not selection:
-            self.show_custom_messagebox("No Selection", "Please select an attribute to delete.", "warning")
-            return
-        
-        item = selection[0]
-        attr_name = self.attr_tree.item(item, "text")
-        
-        # Enhanced confirmation dialog
-        result = messagebox.askyesno("Confirm Delete", 
-                                   f"Are you sure you want to delete attribute '{attr_name}'?\n\n"
-                                   f"This action cannot be undone.")
-        if result:
-            # Remove from XML
-            tree_selection = self.tree.selection()
-            if tree_selection:
-                tree_item = tree_selection[0]
-                if tree_item in self.element_map:
-                    element = self.element_map[tree_item]
-                    if attr_name in element.attrib:
-                        del element.attrib[attr_name]
-                    
-                    # Update displays
-                    self.refresh_attribute_display(element)
-                    self.update_tree_item_text(tree_item, element)
-                    self.mark_modified()
-                    
-                    self.status_var.set(f"Deleted attribute: {attr_name}")
-    
     def mark_modified(self):
-        """Mark the document as modified with visual indicators"""
-        if not self.is_modified:
-            self.is_modified = True
-            current_title = self.root.title()
-            if not current_title.endswith("*"):
-                self.root.title(current_title + " *")
-            
-            # Update modified indicator with themed colors
-            self.modified_indicator.config(text="●", foreground=DarkTheme.ACCENT_ORANGE)
-            
-            # Update file info
-            if self.current_file:
-                self.file_info_label.config(text=f"📄 {os.path.basename(self.current_file)} (modified)")
-    
+        """Mark the active tab as modified (adds ● prefix to tab title)."""
+        tab = self.get_active_tab()
+        if tab is None:
+            return
+        tab['modified'] = True
+        filename = os.path.basename(tab['file'])
+        self.notebook.tab(tab['frame'], text=f"● {filename}")
+        self.modified_indicator.config(text="●", foreground=DarkTheme.ACCENT_ORANGE)
+
     def save_as_binary(self):
-        """Save the file in binary format with enhanced user experience"""
-        if not self.current_file:
+        """Save the active tab's file in binary format."""
+        tab = self.get_active_tab()
+        if tab is None:
             self.show_custom_messagebox("No File", "No file is currently open.", "warning")
             return
-        
-        # Show information about the process using custom messagebox instead of standard messagebox
+
         custom_result = self.show_custom_messagebox_with_result(
             "Save as Binary",
             "This will:\n\n"
@@ -1990,54 +1628,45 @@ class GameXMLEditor:
             "Continue?",
             "question"
         )
-        
         if not custom_result:
             return
-        
-        # First save as readable XML
+
         self.save_file()
-        
-        # Then convert to binary
-        success, message = self.converter.save_as_binary(self.current_file)
-        
+
+        success, message = self.converter.save_as_binary(tab['file'])
         if success:
-            self.show_custom_messagebox("Saved as Binary", message, "info")
             self.status_var.set("Saved in binary format")
+            self.show_autoclose_messagebox("Saved as Binary", f"Successfully saved as binary:\n{os.path.basename(tab['file'])}", 2000)
         else:
             self.show_custom_messagebox("Save Error", message, "error")
 
     def show_custom_messagebox_with_result(self, title, message, msg_type="info"):
-        """Show a custom dark-themed message box that returns a result"""
-        result = [False]  # Use a list to allow modification from inner function
-        
+        """Show a custom dark-themed message box that returns True/False"""
+        result = [False]
+
         msg_window = tk.Toplevel(self.root)
         msg_window.title(title)
         msg_window.configure(bg=DarkTheme.BG_DARK)
         msg_window.resizable(False, False)
         msg_window.transient(self.root)
         msg_window.grab_set()
-        
-        # Calculate size based on message length - MODIFY THESE VALUES
+
         lines = message.split('\n')
-        width = max(400, max(len(line) * 9 for line in lines) + 120)  # Increased from 300 to 400
-        height = max(200, len(lines) * 30 + 150)  # Increased from 150 to 200 and multiplier from 25 to 30
+        width = max(400, max(len(line) * 9 for line in lines) + 120)
+        height = max(200, len(lines) * 30 + 150)
         msg_window.geometry(f"{width}x{height}")
-        
-        # Center the window
+
         msg_window.geometry("+%d+%d" % (
             self.root.winfo_rootx() + 200,
             self.root.winfo_rooty() + 200
         ))
-        
-        # Main frame
+
         main_frame = ttk.Frame(msg_window)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
-        # Icon and title
+
         icon_frame = ttk.Frame(main_frame)
         icon_frame.pack(fill=tk.X, pady=(0, 15))
-        
-        # Choose icon based on type
+
         if msg_type == "error":
             icon = "❌"
             color = DarkTheme.ACCENT_RED
@@ -2050,114 +1679,53 @@ class GameXMLEditor:
         else:
             icon = "ℹ️"
             color = DarkTheme.ACCENT_BLUE
-        
-        icon_label = ttk.Label(icon_frame, text=icon, font=('Segoe UI', 18))  # Increased font size from 16 to 18
-        icon_label.pack(side=tk.LEFT)
-        
-        title_label = ttk.Label(icon_frame, text=title, 
-                            font=('Segoe UI', 14, 'bold'),  # Increased font size from 12 to 14
-                            foreground=color)
-        title_label.pack(side=tk.LEFT, padx=(10, 0))
-        
-        # Message
-        msg_label = ttk.Label(main_frame, text=message,
-                            font=('Segoe UI', 11),  # Increased font size from 10 to 11
-                            justify=tk.LEFT,
-                            wraplength=width-60)  # Increased wraplength from width-40 to width-60
-        msg_label.pack(pady=(0, 20))
-        
-        # Button frame for Yes/No buttons
+
+        ttk.Label(icon_frame, text=icon, font=('Segoe UI', 18)).pack(side=tk.LEFT)
+        ttk.Label(icon_frame, text=title, font=('Segoe UI', 14, 'bold'),
+                  foreground=color).pack(side=tk.LEFT, padx=(10, 0))
+
+        ttk.Label(main_frame, text=message, font=('Segoe UI', 11),
+                  justify=tk.LEFT, wraplength=width-60).pack(pady=(0, 20))
+
         button_frame = ttk.Frame(main_frame)
         button_frame.pack()
-        
+
         def on_yes():
             result[0] = True
             msg_window.destroy()
-            
+
         def on_no():
             result[0] = False
             msg_window.destroy()
-        
-        # Yes/No buttons
-        yes_button = ttk.Button(button_frame, 
-                            text="Yes",
-                            command=on_yes,
-                            width=15)  # Increased width from 10 to 15
-        yes_button.pack(side=tk.LEFT, padx=10)  # Increased padx from 5 to 10
-        
-        no_button = ttk.Button(button_frame, 
-                            text="No",
-                            command=on_no,
-                            width=15)  # Increased width from 10 to 15
-        no_button.pack(side=tk.LEFT, padx=10)  # Increased padx from 5 to 10
-        
-        # Focus and wait
+
+        yes_button = ttk.Button(button_frame, text="Yes", command=on_yes, width=15)
+        yes_button.pack(side=tk.LEFT, padx=10)
+        ttk.Button(button_frame, text="No", command=on_no, width=15).pack(side=tk.LEFT, padx=10)
+
         yes_button.focus_set()
         msg_window.wait_window()
-        
+
         return result[0]
 
     def convert_to_readable(self):
-        """Convert current file to readable format with enhanced feedback"""
-        if not self.current_file:
+        """Convert the active tab's file to readable XML format."""
+        tab = self.get_active_tab()
+        if tab is None:
             self.show_custom_messagebox("No File", "No file is currently open.", "warning")
             return
-        
-        # Show progress
+
         self.status_var.set("Converting to readable format...")
         self.root.update()
-        
-        success, message = self.converter.convert_to_readable(self.current_file)
-        
+
+        success, message = self.converter.convert_to_readable(tab['file'])
+
         if success:
-            # Reload the file to show readable format
-            self.load_file(self.current_file)
+            self.load_file(tab['file'])
             self.show_custom_messagebox("Conversion Successful", message, "info")
         else:
             self.show_custom_messagebox("Conversion Failed", message, "error")
             self.status_var.set("Conversion failed")
-    
-    def expand_all(self):
-        """Expand all tree items with progress indication"""
-        self.status_var.set("Expanding all elements...")
-        self.root.update()
-        
-        self.expand_all_recursive("")
-        
-        self.status_var.set("All elements expanded")
-    
-    def expand_all_recursive(self, item):
-        """Recursively expand tree items"""
-        if item:
-            self.tree.item(item, open=True)
-        
-        for child in self.tree.get_children(item):
-            self.expand_all_recursive(child)
-    
-    def collapse_all(self):
-        """Collapse all tree items with progress indication"""
-        self.status_var.set("Collapsing all elements...")
-        self.root.update()
-        
-        self.collapse_all_recursive("")
-        
-        self.status_var.set("All elements collapsed")
-    
-    def collapse_all_recursive(self, item):
-        """Recursively collapse tree items"""
-        for child in self.tree.get_children(item):
-            self.collapse_all_recursive(child)
-            self.tree.item(child, open=False)
-    
-    def show_find_dialog(self):
-        """Show find dialog with enhanced search capabilities"""
-        if not self.tree_data:
-            self.show_custom_messagebox("No File", "No file is currently loaded.", "warning")
-            return
-        
-        dialog = FindDialog(self.root, self.tree)
-        self.root.wait_window(dialog.dialog)
-    
+
     def indent_xml(self, elem, level=0):
         """Add pretty-printing indentation to XML"""
         i = "\n" + level * "  "
@@ -2173,49 +1741,54 @@ class GameXMLEditor:
         else:
             if level and (not elem.tail or not elem.tail.strip()):
                 elem.tail = i
-    
+
     def run(self):
         """Start the application with enhanced window management"""
-        # Set minimum window size
         self.root.minsize(800, 600)
-        
-        # Apply additional dark theme styling to the root window
         self.root.configure(bg=DarkTheme.BG_DARK)
-        
-        # Center window on screen
+
         self.root.update_idletasks()
         width = self.root.winfo_width()
         height = self.root.winfo_height()
         x = (self.root.winfo_screenwidth() // 2) - (width // 2)
         y = (self.root.winfo_screenheight() // 2) - (height // 2)
         self.root.geometry(f"{width}x{height}+{x}+{y}")
-        
-        # Handle window closing
+
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        
-        # Start the main loop
         self.root.mainloop()
-    
+
     def on_closing(self):
-        """Handle application closing with unsaved changes check"""
-        if self.is_modified or self.source_modified:
-            if self.source_modified:
-                message = "You have unsaved changes in the XML source. Do you want to save before closing?"
-            else:
-                message = "You have unsaved changes. Do you want to save before closing?"
-            
+        """Handle application closing — prompt to save any modified tabs."""
+        modified_tabs = [
+            td for td in self.open_files.values()
+            if td['modified'] or td['source_modified']
+        ]
+
+        if modified_tabs:
+            filenames = ", ".join(
+                os.path.basename(td['file']) for td in modified_tabs[:3])
+            if len(modified_tabs) > 3:
+                filenames += f" and {len(modified_tabs) - 3} more"
+
             result = self.show_custom_messagebox_with_yesnocancel(
                 "Unsaved Changes",
-                message,
+                f"You have unsaved changes in:\n{filenames}\n\nSave all before closing?",
                 "warning"
             )
-            
-            if result == "yes":  # Yes - save and close
-                self.save_file()
-                if not self.is_modified and not self.source_modified:  # Only close if save was successful
+
+            if result == "yes":
+                for td in list(modified_tabs):
+                    self.notebook.select(td['frame'])
+                    self.save_file()
+                # Only close if every tab was saved successfully
+                still_modified = [
+                    td for td in self.open_files.values()
+                    if td['modified'] or td['source_modified']
+                ]
+                if not still_modified:
                     self.root.destroy()
-            elif result == "no":  # No - close without saving
+            elif result == "no":
                 self.root.destroy()
-            # Cancel - do nothing, keep window open
+            # "cancel" → keep window open
         else:
             self.root.destroy()
